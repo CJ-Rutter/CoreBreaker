@@ -1,0 +1,3791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CORE BREAKER</title>
+
+<!-- ===== PWA ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0807">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!-- iOS-specific PWA tags (iOS doesn't use manifest.json for these) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Core Breaker">
+<link rel="apple-touch-icon" href="icon-apple.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+
+<!-- Prevent zoom; lock orientation hint -->
+<meta name="format-detection" content="telephone=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@500;600;700&family=Black+Ops+One&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0a0807;
+    --bg-rock: #1a1410;
+    --bg-panel: #221a14;
+    --bg-panel-hi: #2e221a;
+    --line: #3d2e22;
+    --line-hi: #5a4533;
+    --text: #d9c8a8;
+    --text-dim: #8a7a62;
+    --text-faint: #5a4d3d;
+    --amber: #ffb347;
+    --amber-bright: #ffd27a;
+    --rust: #c8512a;
+    --emerald: #4ade80;
+    --danger: #ef4444;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bot: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    user-select: none;
+    -webkit-user-select: none;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(255,179,71,0.06), transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 3px);
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.3 0 0 0 0 0.2 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 99;
+    mix-blend-mode: overlay;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bot);
+  }
+
+  header {
+    background: linear-gradient(180deg, #2a1f17, #1a1410);
+    border-bottom: 2px solid var(--line-hi);
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 14px;
+    color: var(--amber-bright);
+    letter-spacing: 2px;
+    text-shadow: 0 0 8px rgba(255,179,71,0.5);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .logo-dot {
+    width: 7px; height: 7px;
+    background: var(--amber);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--amber);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .header-stats {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  .hstat {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--amber-bright);
+    line-height: 1;
+  }
+  .hstat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: var(--text-faint);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+    text-align: right;
+  }
+
+  .menu-btn {
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--amber-bright);
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .menu-btn:active { background: var(--bg-panel-hi); }
+
+  .world-strip {
+    background: var(--bg-deep);
+    border-bottom: 1px solid var(--line);
+    padding: 6px 12px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .world-strip span { color: var(--amber-bright); }
+
+  .view {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    display: none;
+    flex-direction: column;
+  }
+  .view.active { display: flex; }
+  .view::-webkit-scrollbar { width: 4px; }
+  .view::-webkit-scrollbar-track { background: var(--bg-deep); }
+  .view::-webkit-scrollbar-thumb { background: var(--line-hi); }
+
+  .shaft-header {
+    padding: 12px 16px;
+    border-bottom: 1px dashed var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.3);
+    flex-shrink: 0;
+  }
+  .depth-display {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 22px;
+    color: var(--amber-bright);
+    letter-spacing: 2px;
+    text-shadow: 0 0 12px rgba(255,179,71,0.4);
+    line-height: 1;
+  }
+  .depth-label {
+    font-size: 8px;
+    color: var(--text-faint);
+    letter-spacing: 1.5px;
+    margin-top: 3px;
+  }
+  .layer-info { text-align: right; }
+  .layer-name {
+    font-size: 11px;
+    color: var(--text);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .layer-sub {
+    font-size: 8px;
+    color: var(--text-faint);
+    letter-spacing: 1px;
+    margin-top: 3px;
+  }
+
+  .shaft-canvas {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 240px;
+  }
+
+  .shaft-bg {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg,
+      var(--layer-top, #3d2e22) 0%,
+      var(--layer-mid, #2a1f17) 40%,
+      var(--layer-bot, #0a0807) 100%);
+    transition: background 1s;
+  }
+
+  /* Thin rocky shadow along shaft edges — subtle, doesn't block ore view */
+  .shaft-walls::before, .shaft-walls::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 30px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .shaft-walls::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(0,0,0,0.7), rgba(0,0,0,0.15) 60%, transparent);
+  }
+  .shaft-walls::after {
+    right: 0;
+    background: linear-gradient(270deg, rgba(0,0,0,0.7), rgba(0,0,0,0.15) 60%, transparent);
+  }
+
+  .ore-particle {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    pointer-events: none;
+    animation: rise 1.2s ease-out forwards;
+    text-shadow: 0 0 8px currentColor;
+    font-weight: 800;
+  }
+  @keyframes rise {
+    0% { transform: translateY(0) scale(0.5); opacity: 0; }
+    20% { opacity: 1; transform: translateY(-20px) scale(1); }
+    100% { transform: translateY(-80px) scale(0.8); opacity: 0; }
+  }
+
+  .rig {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 140px;
+    height: 130px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  /* Drill housing — chunky industrial machine */
+  .rig-body {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 96px;
+    height: 50px;
+    background:
+      linear-gradient(180deg, #5a4530 0%, #3a2818 60%, #2a1f17 100%);
+    border: 2px solid var(--line-hi);
+    border-bottom: 3px solid #1a1410;
+    box-shadow:
+      inset 0 2px 0 rgba(255,179,71,0.15),
+      inset 0 -3px 6px rgba(0,0,0,0.5),
+      0 4px 12px rgba(0,0,0,0.6);
+  }
+  /* Rivets along the housing edges */
+  .rig-body::before,
+  .rig-body::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    width: 5px; height: 5px;
+    background: radial-gradient(circle at 30% 30%, #8a6a45, #2a1f17);
+    border-radius: 50%;
+    box-shadow:
+      0 14px 0 radial-gradient(circle at 30% 30%, #8a6a45, #2a1f17);
+  }
+  .rig-body::before { left: 6px; box-shadow: 0 30px 0 #2a1f17, 78px 0 0 #2a1f17, 78px 30px 0 #2a1f17; }
+  .rig-body::after  { right: 6px; display: none; }
+  /* Status indicator light on the housing */
+  .rig-led {
+    position: absolute;
+    bottom: 95px;
+    left: calc(50% + 28px);
+    width: 6px; height: 6px;
+    background: var(--amber);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--amber);
+    z-index: 6;
+    animation: pulse 1.4s infinite;
+  }
+  /* The chuck / collar that holds the bit */
+  .rig-chuck {
+    position: absolute;
+    bottom: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 18px;
+    background:
+      linear-gradient(180deg, #8a7050 0%, #5a4533 50%, #3a2818 100%);
+    border: 1.5px solid #1a1410;
+    border-radius: 2px;
+    z-index: 6;
+    box-shadow: inset 0 1px 0 rgba(255,200,120,0.3);
+  }
+  .rig-chuck::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 4px; right: 4px;
+    height: 2px;
+    background: rgba(0,0,0,0.5);
+    transform: translateY(-50%);
+  }
+  /* The drill bit itself — SVG container */
+  .rig-bit {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 64px;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6)) drop-shadow(0 0 8px rgba(255,179,71,0.3));
+    transform-origin: 50% 30%;
+  }
+  .rig-bit svg { display: block; width: 100%; height: 100%; }
+  .rig-bit.mining {
+    animation: drill-pump 0.12s infinite;
+  }
+  /* Helical motion: the chevron pattern translates vertically downward.
+     Because the chevrons are V-shaped, the eye reads this as rotation. */
+  .rig-bit.mining .bit-flute-pattern {
+    animation: drill-helix 0.4s linear infinite;
+  }
+  /* Tip flutes scroll too, at the same cadence, to sell the illusion all the way down */
+  .rig-bit.mining .bit-tip-flutes {
+    animation: drill-helix-tip 0.4s linear infinite;
+  }
+  @keyframes drill-pump {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(3px); }
+  }
+  @keyframes drill-helix {
+    from { transform: translateY(0); }
+    to   { transform: translateY(12px); } /* pattern repeats every 12 units */
+  }
+  @keyframes drill-helix-tip {
+    from { transform: translateY(0); }
+    to   { transform: translateY(8px); }
+  }
+  /* Idle state: subtle static helix shading so it still reads as a threaded bit when not spinning */
+  .rig-bit .bit-flute-pattern {
+    /* no transform by default — chevrons sit where drawn */
+  }
+  /* Sparks at the drill tip when mining */
+  .rig-bit.mining::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 8px;
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(255,200,80,0.9), transparent 60%),
+      radial-gradient(ellipse at 70% 50%, rgba(255,140,40,0.9), transparent 60%);
+    filter: blur(1px);
+    animation: sparks 0.12s infinite;
+  }
+  @keyframes sparks {
+    0%, 100% { opacity: 0.4; transform: translateX(-50%) scale(0.8); }
+    50% { opacity: 1; transform: translateX(-50%) scale(1.3); }
+  }
+
+  .rig-light {
+    position: absolute;
+    top: -50px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(255,179,71,0.22), transparent 60%);
+    pointer-events: none;
+  }
+
+  /* Tunnel between MINE button and drill rig — shows progress through current layer */
+  /* === DEPTH SCROLL WORLD ===
+     The shaft canvas becomes a living vertical world. The drill stays roughly fixed;
+     the rock walls, layer bands, and embedded ore sparkles scroll past it as depth increases. */
+  .depth-world {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    z-index: 1;
+    pointer-events: none;
+  }
+  /* Scrolling content is taller than the viewport and translated vertically based on depth */
+  .depth-scroll {
+    position: absolute;
+    left: 0; right: 0;
+    top: 0;
+    will-change: transform;
+    transition: transform 0.25s ease-out;
+  }
+  /* Layer band divider — a horizontal strip marking each layer boundary */
+  .layer-band {
+    position: absolute;
+    left: 36px; right: 36px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .layer-band-line {
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+    box-shadow: 0 0 8px rgba(255,179,71,0.5);
+  }
+  .layer-band-label {
+    position: relative;
+    background: var(--bg-deep);
+    border: 1px solid var(--amber);
+    color: var(--amber-bright);
+    font-family: 'Black Ops One', 'Impact', sans-serif;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 2px 8px;
+    box-shadow: 0 0 10px rgba(255,179,71,0.4);
+    text-transform: uppercase;
+  }
+  /* Ore sparkle embedded at its minDepth — glimmers to hint "this is here" */
+  .ore-sparkle {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 800;
+    font-size: 14px;
+    pointer-events: none;
+    text-shadow: 0 0 10px currentColor, 0 0 4px currentColor;
+    animation: ore-glimmer 2.4s ease-in-out infinite;
+    z-index: 2;
+  }
+  /* Vein layer sits behind everything else in the depth-scroll */
+  .vein-layer {
+    z-index: 0;
+  }
+  @keyframes ore-glimmer {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50%      { opacity: 1;    transform: scale(1.12); }
+  }
+  /* Depth ruler on the left — meter tick marks */
+  .depth-ruler {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 36px;
+    pointer-events: none;
+  }
+  .depth-tick {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    display: flex;
+    align-items: center;
+  }
+  .depth-tick-line {
+    position: absolute;
+    left: 8px;
+    width: 16px;
+    height: 1px;
+    background: rgba(255,179,71,0.3);
+  }
+  .depth-tick.major .depth-tick-line {
+    width: 22px;
+    background: rgba(255,179,71,0.7);
+    height: 2px;
+  }
+  .depth-tick-label {
+    position: absolute;
+    left: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--amber);
+    transform: translateY(-50%);
+    text-shadow: 0 0 4px rgba(0,0,0,0.9);
+  }
+  /* Small "next layer in Xm" indicator beneath the drill */
+  .next-layer-pill {
+    position: absolute;
+    bottom: 156px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-deep);
+    border: 1px solid var(--amber);
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 3px 10px;
+    z-index: 4;
+    pointer-events: none;
+    box-shadow: 0 0 8px rgba(255,179,71,0.4);
+    white-space: nowrap;
+  }
+  .next-layer-pill.close {
+    animation: next-pill-pulse 0.8s ease-in-out infinite;
+  }
+  @keyframes next-pill-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255,179,71,0.4); }
+    50%      { box-shadow: 0 0 16px rgba(255,179,71,0.8); }
+  }
+
+  /* Compact inline MINE button that lives in the dig-controls bar (no longer in shaft) */
+  .mine-button {
+    background: linear-gradient(180deg, var(--amber), var(--rust));
+    border: 2px solid #1a1410;
+    color: #1a1410;
+    font-family: 'Black Ops One', 'Impact', 'Oswald', 'Roboto Condensed', 'Arial Black', sans-serif;
+    font-size: 14px;
+    letter-spacing: 3px;
+    padding: 10px 16px;
+    cursor: pointer;
+    box-shadow:
+      0 0 0 1px var(--amber),
+      0 3px 0 0 #6b3015,
+      0 5px 10px rgba(0,0,0,0.6);
+    transition: all 0.08s;
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.25), 0 -1px 0 rgba(0,0,0,0.3);
+    touch-action: none;
+    user-select: none;
+    width: 100%;
+    font-weight: 400;
+  }
+  .mine-button:active {
+    transform: translateY(2px);
+    box-shadow:
+      0 0 0 1px var(--amber),
+      0 1px 0 0 #6b3015,
+      0 2px 5px rgba(0,0,0,0.6);
+  }
+  .mine-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .dig-controls {
+    background: rgba(0,0,0,0.5);
+    border-top: 2px solid var(--line-hi);
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .action-buttons {
+    display: grid;
+    grid-template-columns: minmax(90px, 0.6fr) 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .dig-label {
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+  .dig-bar {
+    height: 10px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    overflow: hidden;
+    position: relative;
+  }
+  .dig-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--rust), var(--amber));
+    transition: width 0.1s;
+    box-shadow: 0 0 8px rgba(255,179,71,0.4);
+  }
+  .dig-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(45deg,
+      transparent 0, transparent 4px,
+      rgba(0,0,0,0.2) 4px, rgba(0,0,0,0.2) 8px);
+  }
+  .dig-btn {
+    background: var(--bg-deep);
+    border: 2px solid var(--line-hi);
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+    padding: 10px 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    width: 100%;
+    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    line-height: 1.1;
+    touch-action: none;
+    user-select: none;
+  }
+  .dig-btn:active:not(:disabled) { background: var(--bg-panel-hi); border-color: var(--amber); }
+  .dig-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    border-color: rgba(239,68,68,0.3);
+    color: var(--text-dim);
+  }
+  .dig-btn-label { font-family: 'Black Ops One', 'Impact', 'Oswald', 'Roboto Condensed', 'Arial Black', sans-serif; font-size: 16px; letter-spacing: 4px; }
+  .dig-btn-cost {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dig-btn-cost.lack { color: var(--danger); }
+  .dig-btn-cost .sym {
+    font-weight: bold;
+    color: var(--cost-color, var(--amber-bright));
+    text-shadow: 0 0 6px var(--cost-color, transparent);
+  }
+
+  .ore-strip {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--line);
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .ore-strip::-webkit-scrollbar { display: none; }
+  .ore-chip {
+    flex-shrink: 0;
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    min-width: 70px;
+  }
+  .ore-chip.locked { opacity: 0.3; }
+  .ore-chip-sym {
+    font-weight: bold;
+    color: var(--ore-color);
+    text-shadow: 0 0 6px var(--ore-color);
+    font-size: 13px;
+  }
+  .ore-chip-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .tab-bar {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    background: var(--bg-deep);
+    border-top: 2px solid var(--line-hi);
+    flex-shrink: 0;
+  }
+  .tab-bar button {
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--line);
+    color: var(--text-faint);
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 8px 2px 10px;
+    cursor: pointer;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    position: relative;
+  }
+  .tab-bar button.locked {
+    color: var(--text-faint);
+    opacity: 0.5;
+  }
+  .tab-bar button:last-child { border-right: none; }
+  .tab-bar button.active {
+    color: var(--amber-bright);
+    background: var(--bg-panel);
+    opacity: 1;
+  }
+  .tab-bar button.active::after {
+    content: '';
+    position: absolute;
+    top: -2px; left: 0; right: 0;
+    height: 2px;
+    background: var(--amber);
+    box-shadow: 0 0 8px var(--amber);
+  }
+  .tab-icon { font-size: 14px; line-height: 1; }
+
+  .ore-list { padding: 8px; }
+  .ore-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: center;
+    padding: 10px 10px;
+    border: 1px solid var(--line);
+    background: var(--bg-panel);
+    margin-bottom: 6px;
+    gap: 10px;
+  }
+  .ore-row.locked { opacity: 0.3; }
+  .ore-icon {
+    width: 32px; height: 32px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--ore-color, var(--text));
+    text-shadow: 0 0 8px var(--ore-color, transparent);
+  }
+  .ore-info { min-width: 0; }
+  .ore-name {
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .ore-depth {
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-top: 2px;
+  }
+  .ore-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--ore-color, var(--amber-bright));
+    line-height: 1;
+    text-align: right;
+    letter-spacing: -0.5px;
+  }
+  .ore-sell-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+  .ore-sell-presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+  .preset-btn {
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 6px 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    touch-action: manipulation;
+  }
+  .preset-btn:active:not(:disabled) {
+    background: var(--bg-panel-hi);
+    border-color: var(--amber);
+    color: var(--amber-bright);
+  }
+  .preset-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .ore-sell-slider-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .sell-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 24px;
+    background: transparent;
+    outline: none;
+    margin: 0;
+    padding: 0;
+    touch-action: manipulation;
+  }
+  .sell-slider:disabled { opacity: 0.4; pointer-events: none; }
+  .sell-slider::-webkit-slider-runnable-track {
+    height: 8px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    border-radius: 0;
+  }
+  .sell-slider::-moz-range-track {
+    height: 8px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    border-radius: 0;
+  }
+  .sell-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 22px;
+    background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+    border: 2px solid #1a1410;
+    border-radius: 0;
+    margin-top: -8px;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(255,179,71,0.6);
+  }
+  .sell-slider::-moz-range-thumb {
+    width: 18px;
+    height: 22px;
+    background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+    border: 2px solid #1a1410;
+    border-radius: 0;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(255,179,71,0.6);
+  }
+  .sell-action {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .sell-summary {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    line-height: 1.3;
+  }
+  .sell-summary .qty {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .sell-summary .credits {
+    color: var(--amber-bright);
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+  .sell-go-btn {
+    background: linear-gradient(180deg, var(--amber), var(--rust));
+    border: 1px solid #1a1410;
+    color: #1a1410;
+    font-family: 'Black Ops One', 'Impact', 'Oswald', 'Roboto Condensed', 'Arial Black', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    padding: 8px 16px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 0 0 1px var(--amber), 0 2px 0 0 #6b3015;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+    touch-action: manipulation;
+  }
+  .sell-go-btn:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 1px var(--amber), 0 1px 0 0 #6b3015;
+  }
+  .sell-go-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--bg-panel);
+    color: var(--text-faint);
+    box-shadow: none;
+    text-shadow: none;
+  }
+  .ore-sell-price {
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 0.5px;
+  }
+  .ore-sell-price .v {
+    color: var(--amber-bright);
+    font-weight: 700;
+  }
+
+  /* === STASH SECTIONS === */
+  .stash-section-head {
+    padding: 12px 14px 6px;
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .stash-section-head .count {
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+  .stash-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 11px;
+    line-height: 1.6;
+    border: 1px dashed var(--line);
+    background: rgba(0,0,0,0.15);
+    margin: 0 8px 12px;
+  }
+
+  /* === FORGE VIEW === */
+  .forge-locked {
+    padding: 32px 24px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .forge-locked .big {
+    color: var(--amber-bright);
+    font-family: 'Major Mono Display', monospace;
+    font-size: 18px;
+    letter-spacing: 3px;
+    margin-bottom: 12px;
+  }
+  .forge-locked .req {
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .forge-locked .req .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    padding: 8px 12px;
+    margin: 6px 0;
+  }
+  .forge-locked .req .row .ok { color: var(--emerald); }
+  .forge-locked .req .row .lack { color: var(--danger); }
+  .unlock-btn {
+    background: linear-gradient(180deg, var(--amber), var(--rust));
+    border: 2px solid #1a1410;
+    color: #1a1410;
+    font-family: 'Black Ops One', 'Impact', 'Oswald', 'Roboto Condensed', 'Arial Black', sans-serif;
+    font-size: 18px;
+    letter-spacing: 4px;
+    padding: 12px 28px;
+    cursor: pointer;
+    margin-top: 16px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+    box-shadow: 0 0 0 2px var(--amber), 0 4px 0 0 #6b3015;
+  }
+  .unlock-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--bg-panel);
+    color: var(--text-faint);
+    box-shadow: none;
+  }
+  .unlock-btn:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 2px var(--amber), 0 2px 0 0 #6b3015;
+  }
+
+  /* === SMELT SLOTS === */
+  .smelt-slots {
+    background: var(--bg-deep);
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--line-hi);
+  }
+  .smelt-slots-title {
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .smelt-slot {
+    display: grid;
+    grid-template-columns: 28px 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    margin-bottom: 3px;
+  }
+  .smelt-slot.empty {
+    opacity: 0.35;
+    border-style: dashed;
+    grid-template-columns: 1fr;
+    padding: 3px 10px;
+  }
+  .smelt-slot.empty .smelt-slot-name {
+    font-size: 9px;
+    margin: 0;
+    letter-spacing: 2px;
+    color: var(--text-faint);
+    text-align: center;
+  }
+  .smelt-slot-icon {
+    width: 26px; height: 26px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--ore-color, var(--text));
+    text-shadow: 0 0 6px var(--ore-color, transparent);
+  }
+  .smelt-slot-info { min-width: 0; }
+  .smelt-slot-name {
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .smelt-slot-bar {
+    height: 5px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    overflow: hidden;
+    position: relative;
+  }
+  .smelt-slot-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--rust), var(--amber));
+    box-shadow: 0 0 6px rgba(255,179,71,0.4);
+  }
+  .smelt-slot-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--amber-bright);
+    text-align: right;
+    min-width: 40px;
+  }
+  .smelt-cancel {
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    touch-action: manipulation;
+  }
+  .smelt-cancel:active {
+    background: rgba(239,68,68,0.15);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  /* === FORGE TABS (T1/T2/T3 categories) === */
+  .forge-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--bg-deep);
+    border-bottom: 1px solid var(--line-hi);
+  }
+  .forge-tabs button {
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 10px 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    position: relative;
+  }
+  .forge-tabs button:last-child { border-right: none; }
+  .forge-tabs button.active {
+    color: var(--amber-bright);
+    background: var(--bg-panel);
+  }
+  .forge-tabs button.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 0; right: 0;
+    height: 2px;
+    background: var(--amber);
+  }
+
+  /* === RECIPE CARDS === */
+  .recipe-list { padding: 8px; }
+  .recipe-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    margin-bottom: 8px;
+    padding: 12px;
+    cursor: pointer;
+  }
+  .recipe-card:active:not(.disabled) {
+    background: var(--bg-panel-hi);
+    border-color: var(--amber);
+  }
+  .recipe-card.disabled { opacity: 0.5; }
+  .recipe-head {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .recipe-output-icon {
+    width: 28px; height: 28px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--ore-color);
+    text-shadow: 0 0 6px var(--ore-color);
+  }
+  .recipe-name {
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--amber-bright);
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .recipe-time {
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-top: 2px;
+  }
+  .recipe-yield {
+    font-size: 11px;
+    color: var(--emerald);
+    font-weight: 700;
+  }
+  .recipe-inputs {
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+  }
+  .recipe-input {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .recipe-input .sym {
+    color: var(--ore-color);
+    font-weight: 700;
+    text-shadow: 0 0 4px var(--ore-color);
+  }
+  .recipe-input .amt {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+  }
+  .recipe-input .amt.ok { color: var(--text); }
+  .recipe-input .amt.lack { color: var(--danger); }
+
+  .recipe-footer {
+    border-top: 1px dashed var(--line);
+    margin-top: 8px;
+    padding-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .recipe-tap-hint {
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-align: right;
+  }
+  .auto-toggle {
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 5px 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .auto-toggle:active { background: var(--bg-panel-hi); }
+  .auto-toggle.on {
+    border-color: var(--emerald);
+    color: var(--emerald);
+    background: rgba(74,222,128,0.06);
+  }
+  .auto-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    transition: all 0.15s;
+  }
+  .auto-toggle.on .auto-dot {
+    background: var(--emerald);
+    box-shadow: 0 0 6px var(--emerald);
+  }
+
+  .cards { padding: 8px; }
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    margin-bottom: 8px;
+    padding: 14px;
+    cursor: pointer;
+    position: relative;
+  }
+  .card:active:not(.locked):not(.maxed) {
+    background: var(--bg-panel-hi);
+    border-color: var(--amber);
+  }
+  .card.locked { opacity: 0.5; }
+  .card.maxed { opacity: 0.7; border-color: var(--emerald); }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+  .card-name {
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--amber-bright);
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .card-level {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+  .card-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  .card-effect {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--emerald);
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+  }
+  .card-cost {
+    font-size: 12px;
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .cost-item { display: flex; gap: 4px; align-items: center; }
+  .cost-amount {
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .cost-amount.lack { color: var(--danger); }
+
+  .world-card.current { border-color: var(--amber); background: rgba(255,179,71,0.08); }
+  .world-card.current::before {
+    content: '◉ ACTIVE';
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 9px;
+    color: var(--amber-bright);
+    letter-spacing: 1px;
+  }
+
+  .toast-host {
+    position: fixed;
+    top: calc(60px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    width: max-content;
+    max-width: 90vw;
+  }
+  .toast {
+    background: rgba(34,26,20,0.95);
+    border: 1px solid var(--amber);
+    padding: 8px 14px;
+    font-size: 11px;
+    color: var(--amber-bright);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    backdrop-filter: blur(4px);
+    animation: toast 2.5s forwards;
+    box-shadow: 0 0 20px rgba(255,179,71,0.3);
+    text-align: center;
+  }
+  @keyframes toast {
+    0% { opacity: 0; transform: translateY(-10px); }
+    10%, 80% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-10px); }
+  }
+
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-faint);
+    font-size: 11px;
+    letter-spacing: 1px;
+    line-height: 2;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    padding-top: calc(16px + var(--safe-top));
+    padding-bottom: calc(16px + var(--safe-bot));
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--bg-panel);
+    border: 2px solid var(--amber);
+    width: 100%;
+    max-width: 420px;
+    max-height: 100%;
+    overflow-y: auto;
+    box-shadow: 0 0 40px rgba(255,179,71,0.3);
+  }
+  .modal-head {
+    background: var(--bg-deep);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line-hi);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-title {
+    font-family: 'Major Mono Display', monospace;
+    font-size: 14px;
+    color: var(--amber-bright);
+    letter-spacing: 2px;
+  }
+  .modal-close {
+    background: transparent;
+    border: 1px solid var(--line-hi);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .modal-section-title {
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .action-btn {
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--amber-bright);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    padding: 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .action-btn:active { background: var(--bg-panel-hi); }
+  .action-btn.danger { color: var(--danger); border-color: rgba(239,68,68,0.4); }
+  .action-btn-arrow { color: var(--text-faint); }
+
+  .save-area {
+    width: 100%;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 10px;
+    resize: none;
+    word-break: break-all;
+    user-select: text;
+    -webkit-user-select: text;
+    height: 120px;
+  }
+  .modal-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-box {
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+  }
+  .stat-box-label {
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .stat-box-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--amber-bright);
+    margin-top: 4px;
+    letter-spacing: -0.3px;
+  }
+
+  @media (min-width: 700px) {
+    #app { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--line-hi); border-right: 1px solid var(--line-hi); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">
+      <span class="logo-dot"></span>
+      CORE·BREAKER
+      <span style="font-size: 8px; color: var(--text-faint); margin-left: 4px; letter-spacing: 1px;">B16</span>
+    </div>
+    <div class="header-stats">
+      <div>
+        <div class="hstat-label">Credits</div>
+        <div class="hstat" id="credits">0</div>
+      </div>
+      <div>
+        <div class="hstat-label">Power</div>
+        <div class="hstat" id="power">1.0×</div>
+      </div>
+    </div>
+    <button class="menu-btn" id="menu-btn" aria-label="Menu">☰</button>
+  </header>
+  <div class="world-strip" id="world-badge">SECTOR 01 // <span>SURFACE EARTH</span></div>
+
+  <div class="view active" id="view-mine">
+    <div class="shaft-header">
+      <div>
+        <div class="depth-display" id="depth-display">0m</div>
+        <div class="depth-label">CURRENT DEPTH</div>
+      </div>
+      <div class="layer-info">
+        <div class="layer-name" id="layer-name">TOPSOIL</div>
+        <div class="layer-sub" id="layer-sub">Loose dirt and pebbles</div>
+      </div>
+    </div>
+    <div class="shaft-canvas" id="shaft-canvas">
+      <div class="shaft-bg" id="shaft-bg"></div>
+      <!-- Scrolling depth world: ruler + layer bands + embedded ores, all translated as depth increases -->
+      <div class="depth-world">
+        <div class="depth-scroll" id="depth-scroll">
+          <div class="depth-ruler" id="depth-ruler"></div>
+          <div id="depth-content"></div>
+        </div>
+      </div>
+      <div class="shaft-walls"></div>
+      <div class="next-layer-pill" id="next-layer-pill"></div>
+      <div class="rig">
+        <div class="rig-light"></div>
+        <div class="rig-body"></div>
+        <div class="rig-led"></div>
+        <div class="rig-chuck"></div>
+        <div class="rig-bit" id="rig-bit">
+          <svg viewBox="0 0 32 64" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="bit-shaft" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#3a2818"/>
+                <stop offset="40%" stop-color="#a07a4a"/>
+                <stop offset="55%" stop-color="#d8a868"/>
+                <stop offset="70%" stop-color="#a07a4a"/>
+                <stop offset="100%" stop-color="#3a2818"/>
+              </linearGradient>
+              <linearGradient id="bit-tip" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#d8a868"/>
+                <stop offset="100%" stop-color="#5a3815"/>
+              </linearGradient>
+              <clipPath id="bit-clip">
+                <rect x="9" y="2" width="14" height="36"/>
+              </clipPath>
+            </defs>
+            <rect x="9" y="2" width="14" height="36" fill="url(#bit-shaft)"/>
+            <g class="bit-flutes" clip-path="url(#bit-clip)">
+              <g class="bit-flute-pattern">
+                <path d="M 8 -8 L 16 -4 L 24 -8 L 24 -2 L 16 2 L 8 -2 Z" fill="rgba(0,0,0,0.55)"/>
+                <path d="M 8 4  L 16 8  L 24 4  L 24 10 L 16 14 L 8 10 Z" fill="rgba(0,0,0,0.55)"/>
+                <path d="M 8 16 L 16 20 L 24 16 L 24 22 L 16 26 L 8 22 Z" fill="rgba(0,0,0,0.55)"/>
+                <path d="M 8 28 L 16 32 L 24 28 L 24 34 L 16 38 L 8 34 Z" fill="rgba(0,0,0,0.55)"/>
+                <path d="M 8 40 L 16 44 L 24 40 L 24 46 L 16 50 L 8 46 Z" fill="rgba(0,0,0,0.55)"/>
+                <path d="M 8 -2 L 16 2  L 24 -2" stroke="rgba(255,215,150,0.85)" stroke-width="0.8" fill="none"/>
+                <path d="M 8 10 L 16 14 L 24 10" stroke="rgba(255,215,150,0.85)" stroke-width="0.8" fill="none"/>
+                <path d="M 8 22 L 16 26 L 24 22" stroke="rgba(255,215,150,0.85)" stroke-width="0.8" fill="none"/>
+                <path d="M 8 34 L 16 38 L 24 34" stroke="rgba(255,215,150,0.85)" stroke-width="0.8" fill="none"/>
+                <path d="M 8 46 L 16 50 L 24 46" stroke="rgba(255,215,150,0.85)" stroke-width="0.8" fill="none"/>
+              </g>
+            </g>
+            <polygon points="9,38 23,38 16,62" fill="url(#bit-tip)"/>
+            <g class="bit-tip-flutes">
+              <path d="M 11 42 L 16 46 L 21 42" stroke="rgba(0,0,0,0.5)" stroke-width="0.8" fill="none"/>
+              <path d="M 13 50 L 16 52 L 19 50" stroke="rgba(0,0,0,0.5)" stroke-width="0.8" fill="none"/>
+            </g>
+            <line x1="16" y1="40" x2="16" y2="60" stroke="rgba(255,230,170,0.6)" stroke-width="1.2"/>
+            <line x1="9" y1="2" x2="9" y2="38" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+            <line x1="23" y1="2" x2="23" y2="38" stroke="rgba(255,210,140,0.4)" stroke-width="1"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="ore-strip" id="ore-strip"></div>
+    <div class="dig-controls">
+      <div class="dig-label">
+        <span>EXCAVATE</span>
+        <span id="dig-progress-text">0 / 100</span>
+      </div>
+      <div class="dig-bar"><div class="dig-fill" id="dig-fill" style="width:0%"></div></div>
+      <div class="action-buttons">
+        <button class="mine-button" id="mine-btn">MINE</button>
+        <button class="dig-btn" id="dig-btn">
+          <span class="dig-btn-label">⛏ DIG DEEPER</span>
+          <span class="dig-btn-cost" id="dig-btn-cost">—</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-inv">
+    <div class="ore-list" id="ore-list"></div>
+  </div>
+
+  <div class="view" id="view-forge">
+    <div id="forge-content"></div>
+  </div>
+
+  <div class="view" id="view-gear">
+    <div class="cards" id="cards-gear"></div>
+  </div>
+
+  <div class="view" id="view-research">
+    <div id="research-content"></div>
+  </div>
+
+  <div class="view" id="view-worlds">
+    <div class="cards" id="cards-worlds"></div>
+  </div>
+
+  <nav class="tab-bar">
+    <button class="active" data-view="mine"><span class="tab-icon">⛏</span>Mine</button>
+    <button data-view="inv"><span class="tab-icon">◆</span>Stash</button>
+    <button data-view="forge"><span class="tab-icon">🜂</span>Forge</button>
+    <button data-view="gear"><span class="tab-icon">⚙</span>Gear</button>
+    <button data-view="research"><span class="tab-icon">⚛</span>Lab</button>
+    <button data-view="worlds"><span class="tab-icon">◉</span>Worlds</button>
+  </nav>
+</div>
+
+<div class="modal-overlay" id="modal-menu">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">MENU</div>
+      <button class="modal-close" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="modal-section-title">Statistics</div>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-box-label">Total Mined</div>
+            <div class="stat-box-val" id="stat-mined">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-label">Total Clicks</div>
+            <div class="stat-box-val" id="stat-clicks">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-label">Max Depth</div>
+            <div class="stat-box-val" id="stat-depth">0m</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-label">Worlds</div>
+            <div class="stat-box-val" id="stat-worlds">1/4</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="modal-section-title">Save Data</div>
+        <button class="action-btn" id="btn-save">
+          SAVE NOW <span class="action-btn-arrow">↻</span>
+        </button>
+        <div style="height:6px"></div>
+        <button class="action-btn" id="btn-export">
+          EXPORT SAVE CODE <span class="action-btn-arrow">↗</span>
+        </button>
+        <div style="height:6px"></div>
+        <button class="action-btn" id="btn-import">
+          IMPORT SAVE CODE <span class="action-btn-arrow">↙</span>
+        </button>
+      </div>
+      <div style="font-size:9px;color:var(--text-faint);text-align:center;letter-spacing:1px;">
+        AUTO-SAVES EVERY 5 SECONDS
+      </div>
+      <div>
+        <div class="modal-section-title">Danger Zone</div>
+        <button class="action-btn danger" id="btn-reset">
+          RESET ALL PROGRESS <span class="action-btn-arrow">⚠</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-export">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">EXPORT</div>
+      <button class="modal-close" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.6;">
+        Copy this code and store it somewhere safe. Paste into IMPORT on any device to restore your progress.
+      </div>
+      <textarea class="save-area" id="export-text" readonly></textarea>
+      <div class="modal-row">
+        <button class="action-btn" id="btn-copy" style="text-align:center;justify-content:center;">COPY</button>
+        <button class="action-btn" data-close style="text-align:center;justify-content:center;">DONE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-import">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">IMPORT</div>
+      <button class="modal-close" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--danger);line-height:1.6;letter-spacing:0.5px;">
+        ⚠ This will OVERWRITE your current save.
+      </div>
+      <textarea class="save-area" id="import-text" placeholder="Paste your save code here..."></textarea>
+      <div class="modal-row">
+        <button class="action-btn" data-close style="text-align:center;justify-content:center;">CANCEL</button>
+        <button class="action-btn danger" id="btn-do-import" style="text-align:center;justify-content:center;">LOAD</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="confirm-title">CONFIRM</div>
+      <button class="modal-close" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div id="confirm-body" style="font-size:13px;color:var(--text);line-height:1.6;padding:4px 0;"></div>
+      <div class="modal-row">
+        <button class="action-btn" data-close style="text-align:center;justify-content:center;">CANCEL</button>
+        <button class="action-btn" id="btn-confirm-ok" style="text-align:center;justify-content:center;">CONFIRM</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-host" id="toasts"></div>
+
+<script>
+const ORES = {
+  dirt:      { sym: 'D', name: 'Dirt',      color: '#a07050', value: 1,    minDepth: 0,    world: 0 },
+  stone:     { sym: 'S', name: 'Stone',     color: '#9a9a9a', value: 3,    minDepth: 5,    world: 0 },
+  coal:      { sym: 'C', name: 'Coal',      color: '#3a3a3a', value: 8,    minDepth: 20,   world: 0 },
+  copper:    { sym: 'Cu',name: 'Copper',    color: '#c87545', value: 22,   minDepth: 50,   world: 0 },
+  iron:      { sym: 'Fe',name: 'Iron',      color: '#d4a87a', value: 60,   minDepth: 120,  world: 0 },
+  silver:    { sym: 'Ag',name: 'Silver',    color: '#e0e0f0', value: 180,  minDepth: 250,  world: 0 },
+  gold:      { sym: 'Au',name: 'Gold',      color: '#ffd24a', value: 500,  minDepth: 450,  world: 0 },
+  diamond:   { sym: '◆', name: 'Diamond',   color: '#a8e8ff', value: 1500, minDepth: 750,  world: 0 },
+  obsidian:  { sym: 'Ob',name: 'Obsidian',  color: '#9966ff', value: 4500, minDepth: 1200, world: 0 },
+  regolith:  { sym: 'R', name: 'Regolith',  color: '#b8b8c8', value: 80,   minDepth: 0,    world: 1 },
+  helium3:   { sym: 'He',name: 'Helium-3',  color: '#90f0ff', value: 250,  minDepth: 30,   world: 1 },
+  titanium:  { sym: 'Ti',name: 'Titanium',  color: '#d4d4e8', value: 700,  minDepth: 100,  world: 1 },
+  platinum:  { sym: 'Pt',name: 'Platinum',  color: '#f0f0ff', value: 2000, minDepth: 250,  world: 1 },
+  moonstone: { sym: '☽', name: 'Moonstone', color: '#c0c0ff', value: 5500, minDepth: 500,  world: 1 },
+  aetherium: { sym: 'Ae',name: 'Aetherium', color: '#8888ff', value: 15000,minDepth: 900,  world: 1 },
+  basalt:    { sym: 'B', name: 'Basalt',    color: '#5a3030', value: 1200, minDepth: 0,    world: 2 },
+  sulfur:    { sym: 'Su',name: 'Sulfur',    color: '#f0e040', value: 3500, minDepth: 40,   world: 2 },
+  magma:     { sym: 'Mg',name: 'Magma Ore', color: '#ff4020', value: 9000, minDepth: 150,  world: 2 },
+  pyroclast: { sym: 'Py',name: 'Pyroclast', color: '#ff8000', value: 24000,minDepth: 350,  world: 2 },
+  starcore:  { sym: '★', name: 'Star Core', color: '#fff080', value: 70000,minDepth: 700,  world: 2 },
+  voidshard: { sym: 'Vs',name: 'Void Shard',color: '#c870ff', value: 50000,  minDepth: 0,   world: 3 },
+  echonite:  { sym: 'Ec',name: 'Echonite',  color: '#ff70c8', value: 150000, minDepth: 60,  world: 3 },
+  nullstone: { sym: '○', name: 'Null Stone',color: '#ffffff', value: 450000, minDepth: 200, world: 3 },
+  singularity:{sym: '∞', name: 'Singularity',color:'#ff00ff', value: 1500000,minDepth: 500, world: 3 },
+};
+
+// ============================================================
+// CRAFTING: INGOTS, ALLOYS, COMPOSITES
+// ============================================================
+// T1 Ingots — one per ore, smelted from 10 raw ore
+const INGOTS = {};
+for (const [oreId, o] of Object.entries(ORES)) {
+  INGOTS[oreId + '_ingot'] = {
+    sym: o.sym,
+    name: o.name + ' Ingot',
+    color: o.color,
+    tier: 1,
+    world: o.world,
+  };
+}
+
+// T2 Alloys — combine 2 ingots
+const ALLOYS = {
+  bronze:    { sym: 'Bz', name: 'Bronze Alloy',    color: '#cd7f32', tier: 2, world: 0 },
+  steel:     { sym: 'St', name: 'Steel Alloy',     color: '#b0b0c0', tier: 2, world: 0 },
+  electrum:  { sym: 'El', name: 'Electrum',        color: '#e8d472', tier: 2, world: 0 },
+  voidsteel: { sym: 'Vs', name: 'Void Steel',      color: '#7a4ab8', tier: 2, world: 0 },
+  lunarsteel:{ sym: 'Ls', name: 'Lunar Steel',     color: '#a8c0e8', tier: 2, world: 1 },
+  aetheralloy:{sym:'Al', name: 'Aether Alloy',    color: '#7878d8', tier: 2, world: 1 },
+  pyrosteel: { sym: 'Ps', name: 'Pyrosteel',       color: '#e85020', tier: 2, world: 2 },
+  starforge: { sym: 'Sf', name: 'Starforge Alloy', color: '#ffd040', tier: 2, world: 2 },
+  voidalloy: { sym: 'Va', name: 'Void Alloy',      color: '#d040ff', tier: 3, world: 3 },
+  nullsteel: { sym: 'Ns', name: 'Null Steel',      color: '#e0e0ff', tier: 3, world: 3 },
+};
+
+// T3 Composites — combine 3-4 alloys/ingots, the most exotic crafted items
+const COMPOSITES = {
+  reinforced:  { sym: '⊞', name: 'Reinforced Core',color: '#ffaa55', tier: 3, world: 0 },
+  arcalloy:    { sym: '⚛', name: 'Arc Composite',  color: '#80c0ff', tier: 3, world: 1 },
+  inferno:     { sym: '✦', name: 'Inferno Matrix', color: '#ff5050', tier: 3, world: 2 },
+  voidcore:    { sym: '⊛', name: 'Void Core',      color: '#c060ff', tier: 4, world: 3 },
+  singularity: { sym: '∞', name: 'Singularity Lattice', color: '#ffffff', tier: 4, world: 3 },
+};
+
+// Combined item lookup (ore id, ingot id, alloy id, or composite id → display info)
+function getItemDef(id) {
+  return ORES[id] || INGOTS[id] || ALLOYS[id] || COMPOSITES[id] || null;
+}
+
+// Smelting recipes: { output: id, qty: n, time: seconds, inputs: { id: amount } }
+const SMELT_RECIPES = [
+  // T1: ore → ingot (10 ore → 1 ingot, time scales with ore tier)
+  ...Object.keys(ORES).map(oreId => ({
+    id: 'smelt_' + oreId,
+    output: oreId + '_ingot',
+    qty: 1,
+    time: ORES[oreId].world === 0 ? 8
+        : ORES[oreId].world === 1 ? 13
+        : ORES[oreId].world === 2 ? 40
+        : 60,
+    inputs: { [oreId]: 10 },
+    tier: 1,
+    world: ORES[oreId].world,
+  })),
+
+  // T2 Alloys (Earth)
+  { id: 'craft_bronze',    output: 'bronze',    qty: 1, time: 45,  tier: 2, world: 0,
+    inputs: { copper_ingot: 5, stone_ingot: 5 } },
+  { id: 'craft_steel',     output: 'steel',     qty: 1, time: 60,  tier: 2, world: 0,
+    inputs: { iron_ingot: 5, coal_ingot: 5 } },
+  { id: 'craft_electrum',  output: 'electrum',  qty: 1, time: 75,  tier: 2, world: 0,
+    inputs: { gold_ingot: 4, silver_ingot: 6 } },
+  { id: 'craft_voidsteel', output: 'voidsteel', qty: 1, time: 90,  tier: 2, world: 0,
+    inputs: { obsidian_ingot: 3, diamond_ingot: 3 } },
+
+  // T2 Alloys (Lunar)
+  { id: 'craft_lunarsteel',  output: 'lunarsteel',  qty: 1, time: 70,  tier: 2, world: 1,
+    inputs: { titanium_ingot: 5, regolith_ingot: 8 } },
+  { id: 'craft_aetheralloy', output: 'aetheralloy', qty: 1, time: 90,  tier: 2, world: 1,
+    inputs: { aetherium_ingot: 3, helium3_ingot: 5, platinum_ingot: 3 } },
+
+  // T2 Alloys (Volcanic)
+  { id: 'craft_pyrosteel', output: 'pyrosteel', qty: 1, time: 90,  tier: 2, world: 2,
+    inputs: { magma_ingot: 4, basalt_ingot: 8, sulfur_ingot: 4 } },
+  { id: 'craft_starforge', output: 'starforge', qty: 1, time: 110, tier: 2, world: 2,
+    inputs: { starcore_ingot: 2, pyroclast_ingot: 4 } },
+
+  // T2 Alloys (Void)
+  { id: 'craft_voidalloy', output: 'voidalloy', qty: 1, time: 100, tier: 2, world: 3,
+    inputs: { voidshard_ingot: 5, echonite_ingot: 3 } },
+  { id: 'craft_nullsteel', output: 'nullsteel', qty: 1, time: 110, tier: 2, world: 3,
+    inputs: { nullstone_ingot: 3, voidshard_ingot: 4 } },
+
+  // T3 Composites
+  { id: 'craft_reinforced', output: 'reinforced', qty: 1, time: 120, tier: 3, world: 0,
+    inputs: { steel: 2, bronze: 2, electrum: 1 } },
+  { id: 'craft_arcalloy',   output: 'arcalloy',   qty: 1, time: 120, tier: 3, world: 1,
+    inputs: { lunarsteel: 2, aetheralloy: 2, electrum: 1 } },
+  { id: 'craft_inferno',    output: 'inferno',    qty: 1, time: 120, tier: 3, world: 2,
+    inputs: { pyrosteel: 2, starforge: 2, voidsteel: 1 } },
+  { id: 'craft_voidcore',   output: 'voidcore',   qty: 1, time: 120, tier: 4, world: 3,
+    inputs: { voidalloy: 3, nullsteel: 2, inferno: 1 } },
+  { id: 'craft_singularity',output: 'singularity',qty: 1, time: 120, tier: 4, world: 3,
+    inputs: { singularity_ingot: 1, voidcore: 2, nullsteel: 3, arcalloy: 2 } },
+];
+
+// Sell prices: per-item base value. Refinery upgrade scales these.
+function sellPrice(itemId) {
+  const ore = ORES[itemId];
+  if (ore) return Math.ceil(ore.value * (buffs.valueMult || 1));
+  // Ingots worth 12× ore (10 ore + smelting effort), alloys/composites are higher tier
+  const ingot = INGOTS[itemId];
+  if (ingot) {
+    const baseOre = ORES[itemId.replace('_ingot', '')];
+    return Math.ceil(baseOre.value * 12 * (buffs.valueMult || 1));
+  }
+  // Alloys: sum input ingot values × 1.4
+  const alloy = ALLOYS[itemId] || COMPOSITES[itemId];
+  if (alloy) {
+    const recipe = SMELT_RECIPES.find(r => r.output === itemId);
+    if (!recipe) return 0;
+    let val = 0;
+    for (const [inId, amt] of Object.entries(recipe.inputs)) {
+      val += sellPrice(inId) * amt;
+    }
+    const tierMult = alloy.tier === 2 ? 1.4 : alloy.tier === 3 ? 1.7 : 2.0;
+    return Math.ceil(val * tierMult);
+  }
+  return 0;
+}
+
+// Tab unlock thresholds
+const FORGE_UNLOCK = { depth: 50, credits: 5000 };
+const LAB_UNLOCK   = { depth: 100, credits: 20000 };
+
+// Smelting slots: how many recipes can run in parallel
+const SMELT_SLOTS = 6;
+
+// Each layer has a "digOre" — the ore you must spend to dig through it
+const LAYERS = [
+  [
+    { depth: 0,    name: 'TOPSOIL',     sub: 'Loose dirt and pebbles', digOre: 'dirt',     top: '#5a4030', mid: '#3d2e22', bot: '#1a1410' },
+    { depth: 30,   name: 'BEDROCK',     sub: 'Compacted stone',        digOre: 'stone',    top: '#4a4040', mid: '#2a2625', bot: '#0a0807' },
+    { depth: 100,  name: 'METAL VEIN',  sub: 'Rust and minerals',      digOre: 'copper',   top: '#5a3520', mid: '#3a2515', bot: '#0a0807' },
+    { depth: 250,  name: 'CRYSTAL ZONE',sub: 'Faint glimmers',         digOre: 'iron',     top: '#404a5a', mid: '#202535', bot: '#050810' },
+    { depth: 500,  name: 'DEEP CORE',   sub: 'Pressure rises',         digOre: 'gold',     top: '#604030', mid: '#3a2010', bot: '#0a0500' },
+    { depth: 1000, name: 'ABYSS',       sub: 'Where light dies',       digOre: 'diamond',  top: '#2a1a3a', mid: '#15082a', bot: '#000000' },
+  ],
+  [
+    { depth: 0,    name: 'LUNAR DUST',  sub: 'Fine grey powder',       digOre: 'regolith', top: '#5a5a6a', mid: '#3a3a4a', bot: '#1a1a25' },
+    { depth: 50,   name: 'MARE BASIN',  sub: 'Volcanic glass',         digOre: 'helium3',  top: '#3a3a55', mid: '#222235', bot: '#0a0a15' },
+    { depth: 200,  name: 'CRUST CORE',  sub: 'Sub-lunar metals',       digOre: 'titanium', top: '#506075', mid: '#253045', bot: '#080c15' },
+    { depth: 600,  name: 'AETHER WELL', sub: 'Strange energies',       digOre: 'moonstone',top: '#404090', mid: '#202060', bot: '#050530' },
+  ],
+  [
+    { depth: 0,    name: 'CINDER FIELD',sub: 'Hot to the touch',       digOre: 'basalt',   top: '#5a2020', mid: '#350f0f', bot: '#1a0505' },
+    { depth: 80,   name: 'MAGMA FLOW',  sub: 'Molten rivers',          digOre: 'sulfur',   top: '#80401a', mid: '#50200a', bot: '#1a0500' },
+    { depth: 250,  name: 'INFERNO',     sub: 'Boiling stone',          digOre: 'magma',    top: '#a04010', mid: '#601505', bot: '#1a0000' },
+    { depth: 600,  name: 'STAR FORGE',  sub: 'Compressed matter',      digOre: 'pyroclast',top: '#c08020', mid: '#704010', bot: '#201000' },
+  ],
+  [
+    { depth: 0,    name: 'OUTER VOID',  sub: 'Reality thins',          digOre: 'voidshard',top: '#3a1a4a', mid: '#1a0a25', bot: '#050010' },
+    { depth: 100,  name: 'NULL FIELD',  sub: 'Where math breaks',      digOre: 'echonite', top: '#4a2050', mid: '#250a30', bot: '#080015' },
+    { depth: 300,  name: 'SINGULARITY', sub: 'Beyond comprehension',   digOre: 'nullstone',top: '#80208a', mid: '#400545', bot: '#100020' },
+  ],
+];
+
+// Dig ore cost scales within a layer: starts at base, grows as you approach the next layer's depth
+const DIG_ORE_BASE = 25;
+const DIG_ORE_MAX = 250; // hard cap per-tap cost
+// Per-world ore cost multiplier — later worlds demand much more dig ore per tap
+const WORLD_DIG_ORE_MULT = [1, 1.5, 2.5, 4];
+
+function digOreCost() {
+  const layers = LAYERS[state.currentWorld];
+  const l = currentLayer();
+  const worldMult = WORLD_DIG_ORE_MULT[state.currentWorld] || 1;
+  // Cargo Bay discount applies here too — it's the most visible dig gate
+  const cargoMult = (buffs.digMult || 1);
+  const idx = layers.indexOf(l);
+  const next = layers[idx + 1];
+  if (!next) {
+    // Last layer — scale based on how far past its start depth we are
+    const over = Math.max(0, state.depth - l.depth);
+    const raw = (DIG_ORE_BASE + over * 0.15) * worldMult * cargoMult;
+    return Math.max(1, Math.min(DIG_ORE_MAX, Math.ceil(raw)));
+  }
+  const span = next.depth - l.depth;
+  const progress = Math.max(0, Math.min(1, (state.depth - l.depth) / span));
+  // Start at base, end at 3x base right before the next layer
+  const cost = DIG_ORE_BASE + progress * DIG_ORE_BASE * 2;
+  const raw = cost * worldMult * cargoMult;
+  return Math.max(1, Math.min(DIG_ORE_MAX, Math.ceil(raw)));
+}
+
+const WORLDS = [
+  { id: 0, name: 'Surface Earth',  sub: 'Sector 01', desc: 'Where it all begins. Dirt, stone, and the dream of riches.', cost: null },
+  { id: 1, name: 'Lunar Outpost',  sub: 'Sector 02', desc: 'Drill through moondust for rare isotopes.',
+    cost: { credits: 250000, gold: 200, diamond: 40 } },
+  { id: 2, name: 'Volcanic World', sub: 'Sector 03', desc: 'Molten depths hide cosmic forge materials.',
+    cost: { credits: 25000000, aetherium: 150, moonstone: 800, obsidian: 200 } },
+  { id: 3, name: 'The Void',       sub: 'Sector 04', desc: 'A place that should not exist. Reality itself is the resource.',
+    cost: { credits: 10000000000, starcore: 400, pyroclast: 2500, aetherium: 1500 } },
+];
+
+const UPGRADES = [
+  { id: 'pickPower', name: 'Pickaxe Mk', desc: 'Increases ore yield per click', maxLevel: 50,
+    base: 10, growth: 1.6,
+    effect: l => `+${l*20}% ore per click`,
+    apply: (s, l) => s.clickMult = 1 + l*0.20 },
+  { id: 'autoMiner', name: 'Auto-Miner', desc: 'Automatic mining drones', maxLevel: 30,
+    base: 100, growth: 2.05,
+    effect: l => `${(l*0.4).toFixed(1)} mines/sec`,
+    apply: (s, l) => s.autoRate = l*0.4 },
+  { id: 'capacity', name: 'Cargo Bay', desc: 'Reduces ore and progress cost per dig', maxLevel: 25,
+    base: 400, growth: 1.85,
+    effect: l => `-${(l*2.5).toFixed(1)}% dig cost`,
+    apply: (s, l) => s.digMult = Math.max(0.30, 1 - l*0.025) },
+  { id: 'depthBonus', name: 'Deep Sensor', desc: 'Bonus ore based on depth', maxLevel: 20,
+    base: 3000, growth: 2.0,
+    effect: l => `+${(l*0.08).toFixed(2)}% per 100m depth`,
+    apply: (s, l) => s.depthBonus = l*0.0008 },
+  { id: 'valueBoost', name: 'Refinery', desc: 'Increases sell price of all ores and crafted items', maxLevel: 30,
+    base: 10000, growth: 1.95,
+    effect: l => `+${l*12}% sell price`,
+    apply: (s, l) => s.valueMult = 1 + l*0.12 },
+];
+
+const RESEARCH = [
+  { id: 'r_geology', name: 'Geology', desc: 'Increases all click yield permanently', maxLevel: 10,
+    cost: l => ({ stone_ingot: Math.ceil(5 * Math.pow(2.0, l)), coal_ingot: Math.ceil(3 * Math.pow(2.0, l)) }),
+    requires: { unlockDepth: 100 },
+    effect: l => `+${l*20}% click yield`,
+    apply: (s, l) => s.researchClickMult = 1 + l*0.2 },
+  { id: 'r_metallurgy', name: 'Metallurgy', desc: 'Auto-miners gain massive speed', maxLevel: 8,
+    cost: l => ({ copper_ingot: Math.ceil(4 * Math.pow(2.2, l)), iron_ingot: Math.ceil(3 * Math.pow(2.2, l)), bronze: Math.ceil(1 + l*0.5) }),
+    requires: { unlockDepth: 150 },
+    effect: l => `+${l*30}% auto rate`,
+    apply: (s, l) => s.researchAutoMult = 1 + l*0.3 },
+  { id: 'r_excavation', name: 'Excavation', desc: 'Dig speed increased per click', maxLevel: 10,
+    cost: l => ({ iron_ingot: Math.ceil(5 * Math.pow(2.1, l)), silver_ingot: Math.ceil(2 * Math.pow(2.1, l)), steel: Math.ceil(1 + l*0.7) }),
+    requires: { unlockDepth: 250 },
+    effect: l => `+${l*25}% dig progress per click`,
+    apply: (s, l) => s.digSpeedMult = 1 + l*0.25 },
+  { id: 'r_alchemy', name: 'Alchemy', desc: 'Chance for double ore drop', maxLevel: 10,
+    cost: l => ({ gold_ingot: Math.ceil(3 * Math.pow(2.3, l)), diamond_ingot: Math.ceil(1 * Math.pow(2.3, l)), electrum: Math.ceil(1 + l*1) }),
+    requires: { unlockDepth: 450 },
+    effect: l => `${l*4}% double-drop chance`,
+    apply: (s, l) => s.doubleChance = l*0.04 },
+  { id: 'r_voidcraft', name: 'Voidcraft', desc: 'Massive global multiplier', maxLevel: 5,
+    cost: l => ({ voidsteel: Math.ceil(2 * Math.pow(2.6, l)), reinforced: Math.ceil(1 + l*1.5) }),
+    requires: { unlockDepth: 1200 },
+    effect: l => `×${(1 + l*0.5).toFixed(1)} all yields`,
+    apply: (s, l) => s.voidMult = 1 + l*0.5 },
+  { id: 'r_lunar', name: 'Lunar Science', desc: 'Lunar depth dig cost reduced', maxLevel: 8,
+    cost: l => ({ lunarsteel: Math.ceil(2 * Math.pow(2.3, l)), helium3_ingot: Math.ceil(3 * Math.pow(2.3, l)) }),
+    requires: { unlockWorld: 1 },
+    effect: l => `-${l*5}% lunar dig cost`,
+    apply: (s, l) => s.lunarDigMult = Math.max(0.3, 1 - l*0.05) },
+  { id: 'r_autodig', name: 'Auto-Excavator', desc: 'Drone arm digs deeper automatically (still consumes ore)', maxLevel: 5,
+    cost: l => ({ aetheralloy: Math.ceil(2 * Math.pow(2.4, l)), arcalloy: Math.ceil(1 + l*1) }),
+    requires: { unlockWorld: 1 },
+    effect: l => `${(l*0.2).toFixed(1)} auto-digs/sec`,
+    apply: (s, l) => s.autoDigRate = l*0.2 },
+  { id: 'r_pyroforge', name: 'Pyroforge', desc: 'Volcanic ore yields multiplied', maxLevel: 5,
+    cost: l => ({ pyrosteel: Math.ceil(2 * Math.pow(2.6, l)), starforge: Math.ceil(1 * Math.pow(2.6, l)), inferno: Math.ceil(1 + l*1) }),
+    requires: { unlockWorld: 2 },
+    effect: l => `×${(1 + l*0.4).toFixed(1)} volcanic yield`,
+    apply: (s, l) => s.volcanicMult = 1 + l*0.4 },
+];
+
+// ============================================================
+// SAVE / LOAD
+// ============================================================
+const SAVE_KEY = 'corebreaker_v4';
+const LEGACY_SAVE_KEYS = ['corebreaker_v3', 'deepshaft_v2', 'deepshaft_v1'];
+const SAVE_VERSION = 4;
+
+const DEFAULT_STATE = {
+  v: SAVE_VERSION,
+  credits: 0,
+  ores: {},
+  depth: 0,
+  maxDepth: 0,
+  digProgress: 0,
+  currentWorld: 0,
+  unlockedWorlds: [0],
+  upgrades: {},
+  research: {},
+  totalClicks: 0,
+  totalMined: 0,
+  // Crafting & economy additions
+  items: {},          // ingots, alloys, composites by id → count
+  smeltQueue: [],     // [{recipeId, startTime, endTime}]
+  autoSmelt: {},      // recipeId → bool, auto-requeue when finished if materials available
+  forgeUnlocked: false,
+  labUnlocked: false,
+  totalSold: 0,       // tracking
+  lastSaved: Date.now(),
+};
+
+let state = loadState();
+let buffs = {};
+
+function loadState() {
+  try {
+    let raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      // Try migrating from older save names
+      for (const oldKey of LEGACY_SAVE_KEYS) {
+        const legacy = localStorage.getItem(oldKey);
+        if (legacy) {
+          raw = legacy;
+          // Move it under the new key and clear the old one
+          localStorage.setItem(SAVE_KEY, legacy);
+          localStorage.removeItem(oldKey);
+          break;
+        }
+      }
+    }
+    if (!raw) return structuredClone(DEFAULT_STATE);
+    const s = JSON.parse(raw);
+    return migrateState(s);
+  } catch (e) {
+    console.error('Load failed', e);
+    return structuredClone(DEFAULT_STATE);
+  }
+}
+
+function migrateState(s) {
+  for (const k of Object.keys(DEFAULT_STATE)) {
+    if (!(k in s)) s[k] = structuredClone(DEFAULT_STATE[k]);
+  }
+  s.v = SAVE_VERSION;
+  return s;
+}
+
+function saveState(silent = false) {
+  try {
+    state.lastSaved = Date.now();
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    if (!silent) toast('✓ SAVED');
+    return true;
+  } catch (e) {
+    console.error('Save failed', e);
+    if (!silent) toast('✕ SAVE FAILED');
+    return false;
+  }
+}
+
+function exportSave() {
+  const json = JSON.stringify(state);
+  const b64 = btoa(unescape(encodeURIComponent(json)));
+  return 'CBv' + SAVE_VERSION + ':' + b64;
+}
+
+function importSave(code) {
+  try {
+    code = code.trim();
+    let payload = code;
+    // Accept new (CBv) and legacy (DSv) prefixes
+    if (code.startsWith('CBv') || code.startsWith('DSv')) {
+      const idx = code.indexOf(':');
+      if (idx === -1) throw new Error('bad format');
+      payload = code.slice(idx + 1);
+    }
+    const json = decodeURIComponent(escape(atob(payload)));
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object');
+    if (typeof parsed.depth !== 'number') throw new Error('invalid save data');
+    state = migrateState(parsed);
+    saveState(true);
+    recalcBuffs();
+    lastUnlockedOres = new Set();
+    lastLayerName = '';
+    checkOreUnlocks();
+    checkLayerChange();
+    renderAll();
+    toast('✓ SAVE LOADED');
+    return true;
+  } catch (e) {
+    console.error('Import failed', e);
+    toast('✕ INVALID SAVE CODE');
+    return false;
+  }
+}
+
+function resetGame() {
+  if (!confirm('Reset ALL progress? This cannot be undone.')) return;
+  state = structuredClone(DEFAULT_STATE);
+  saveState(true);
+  recalcBuffs();
+  lastUnlockedOres = new Set();
+  lastLayerName = '';
+  closeAllModals();
+  renderAll();
+  toast('▶ RESET COMPLETE');
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmt(n) {
+  if (n < 1000) return Math.floor(n).toString();
+  if (n < 1e6) return (n/1e3).toFixed(2) + 'K';
+  if (n < 1e9) return (n/1e6).toFixed(2) + 'M';
+  if (n < 1e12) return (n/1e9).toFixed(2) + 'B';
+  if (n < 1e15) return (n/1e12).toFixed(2) + 'T';
+  return n.toExponential(2);
+}
+
+function getOres(world) {
+  return Object.entries(ORES).filter(([_, o]) => o.world === world);
+}
+
+function currentLayer() {
+  const layers = LAYERS[state.currentWorld];
+  let cur = layers[0];
+  for (const l of layers) if (state.depth >= l.depth) cur = l;
+  return cur;
+}
+
+function digCost() {
+  const base = 50;
+  // Two-stage curve: gentle 1.05^d/5 for first 200m, then 1.07^d/5 dominates
+  const scaleA = Math.pow(1.05, state.depth / 5);
+  const scaleB = Math.pow(1.07, Math.max(0, state.depth - 200) / 5);
+  const scale = scaleA * scaleB;
+  let mult = (buffs.digMult || 1);
+  if (state.currentWorld === 1) mult *= (buffs.lunarDigMult || 1) * 1.4;
+  if (state.currentWorld === 2) mult *= 4.5;
+  if (state.currentWorld === 3) mult *= 12;
+  return Math.ceil(base * scale * mult);
+}
+
+function upgradeCost(u) {
+  const lvl = state.upgrades[u.id] || 0;
+  return Math.ceil(u.base * Math.pow(u.growth, lvl));
+}
+
+function researchAvailable(r) {
+  if (r.requires?.unlockDepth && state.depth < r.requires.unlockDepth) return false;
+  if (r.requires?.unlockWorld != null && !state.unlockedWorlds.includes(r.requires.unlockWorld)) return false;
+  return true;
+}
+
+// Where does this item id live? credits → state.credits, ore → state.ores, anything else → state.items
+function getQty(id) {
+  if (id === 'credits') return state.credits;
+  if (ORES[id]) return state.ores[id] || 0;
+  return state.items[id] || 0;
+}
+function addQty(id, amount) {
+  if (id === 'credits') { state.credits += amount; return; }
+  if (ORES[id]) { state.ores[id] = (state.ores[id] || 0) + amount; return; }
+  state.items[id] = (state.items[id] || 0) + amount;
+}
+function subQty(id, amount) { addQty(id, -amount); }
+
+function canAfford(cost) {
+  for (const [k, v] of Object.entries(cost)) {
+    if (getQty(k) < v) return false;
+  }
+  return true;
+}
+
+function pay(cost) {
+  for (const [k, v] of Object.entries(cost)) {
+    subQty(k, v);
+  }
+}
+
+// Sell an amount of an item id (ore, ingot, alloy, composite)
+function sellItem(itemId, amount) {
+  const have = getQty(itemId);
+  if (have <= 0) return false;
+  const qty = Math.min(amount, have);
+  const price = sellPrice(itemId) * qty;
+  subQty(itemId, qty);
+  state.credits += price;
+  state.totalSold = (state.totalSold || 0) + qty;
+  return { qty, price };
+}
+
+// Try to start a smelt recipe
+function startSmelt(recipeId) {
+  if (state.smeltQueue.length >= SMELT_SLOTS) {
+    toast(`✕ FORGE FULL (${SMELT_SLOTS} SLOTS)`);
+    return false;
+  }
+  const recipe = SMELT_RECIPES.find(r => r.id === recipeId);
+  if (!recipe) return false;
+  if (!canAfford(recipe.inputs)) {
+    toast('✕ INSUFFICIENT MATERIALS');
+    return false;
+  }
+  pay(recipe.inputs);
+  const now = Date.now();
+  state.smeltQueue.push({
+    recipeId,
+    startTime: now,
+    endTime: now + recipe.time * 1000,
+  });
+  return true;
+}
+
+// Cancel an active smelt slot. Refunds 50% of the input materials (rounded down).
+// For T2+ recipes (alloys, composites), shows a confirm dialog first.
+function cancelSmelt(slotIdx) {
+  const job = state.smeltQueue[slotIdx];
+  if (!job) return;
+  const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
+  if (!recipe) return;
+  const def = getItemDef(recipe.output);
+
+  const doCancel = () => {
+    // Refund 50% of inputs
+    let refunded = false;
+    for (const [id, amt] of Object.entries(recipe.inputs)) {
+      const refund = Math.floor(amt * 0.5);
+      if (refund > 0) {
+        addQty(id, refund);
+        refunded = true;
+      }
+    }
+    state.smeltQueue.splice(slotIdx, 1);
+    toast(refunded
+      ? `✕ CANCELLED · 50% MATERIALS REFUNDED`
+      : `✕ CANCELLED`);
+    renderForge();
+    renderInventory();
+  };
+
+  // Confirm for T2+ since they cost more / take longer
+  if (recipe.tier >= 2) {
+    const refundList = Object.entries(recipe.inputs)
+      .map(([id, amt]) => {
+        const inDef = getItemDef(id);
+        return `${Math.floor(amt * 0.5)}× ${inDef?.name || id}`;
+      })
+      .join(', ');
+    showConfirm({
+      title: 'CANCEL SMELT?',
+      body: `Cancel <b style="color:${def.color}">${def.name}</b>?<br><br>You will lose 50% of materials. Refund: <span style="color:var(--amber-bright)">${refundList}</span>`,
+      confirmLabel: 'CANCEL SMELT',
+      onConfirm: doCancel,
+    });
+  } else {
+    doCancel();
+  }
+}
+
+// Process completed smelts (called each tick).
+// If auto-smelt is enabled for a completed recipe and materials are available, requeue it.
+function processSmeltQueue() {
+  if (!state.smeltQueue || state.smeltQueue.length === 0) return false;
+  const now = Date.now();
+  let changed = false;
+  const completedRecipeIds = []; // collect for auto-requeue after filtering
+  state.smeltQueue = state.smeltQueue.filter(job => {
+    if (now >= job.endTime) {
+      const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
+      if (recipe) {
+        addQty(recipe.output, recipe.qty);
+        completedRecipeIds.push(recipe.id);
+      }
+      changed = true;
+      return false; // remove from queue
+    }
+    return true;
+  });
+  // Auto-requeue if toggled on
+  for (const rid of completedRecipeIds) {
+    if (state.autoSmelt && state.autoSmelt[rid]) {
+      if (state.smeltQueue.length < SMELT_SLOTS) {
+        const recipe = SMELT_RECIPES.find(r => r.id === rid);
+        if (recipe && canAfford(recipe.inputs)) {
+          pay(recipe.inputs);
+          const now2 = Date.now();
+          state.smeltQueue.push({
+            recipeId: rid,
+            startTime: now2,
+            endTime: now2 + recipe.time * 1000,
+          });
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
+}
+
+// Tab unlock checks
+function checkForgeUnlock() {
+  if (state.forgeUnlocked) return;
+  if (state.depth >= FORGE_UNLOCK.depth && state.credits >= FORGE_UNLOCK.credits) {
+    // available — but unlock is manual via a button
+  }
+}
+function tryUnlockForge() {
+  if (state.forgeUnlocked) return false;
+  if (state.depth < FORGE_UNLOCK.depth) {
+    toast(`✕ NEEDS ${FORGE_UNLOCK.depth}m DEPTH`); return false;
+  }
+  if (state.credits < FORGE_UNLOCK.credits) {
+    toast(`✕ NEEDS ◈${fmt(FORGE_UNLOCK.credits)}`); return false;
+  }
+  state.credits -= FORGE_UNLOCK.credits;
+  state.forgeUnlocked = true;
+  toast('◉ FORGE UNLOCKED');
+  return true;
+}
+function tryUnlockLab() {
+  if (state.labUnlocked) return false;
+  if (state.depth < LAB_UNLOCK.depth) {
+    toast(`✕ NEEDS ${LAB_UNLOCK.depth}m DEPTH`); return false;
+  }
+  if (state.credits < LAB_UNLOCK.credits) {
+    toast(`✕ NEEDS ◈${fmt(LAB_UNLOCK.credits)}`); return false;
+  }
+  state.credits -= LAB_UNLOCK.credits;
+  state.labUnlocked = true;
+  toast('◉ LAB UNLOCKED');
+  return true;
+}
+
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+// ============================================================
+// CORE GAMEPLAY
+// ============================================================
+function recalcBuffs() {
+  buffs = {
+    clickMult: 1, autoRate: 0, digMult: 1, depthBonus: 0, valueMult: 1,
+    researchClickMult: 1, researchAutoMult: 1, digSpeedMult: 1,
+    doubleChance: 0, voidMult: 1, lunarDigMult: 1, volcanicMult: 1,
+    autoDigRate: 0,
+  };
+  for (const u of UPGRADES) {
+    const lvl = state.upgrades[u.id] || 0;
+    if (lvl > 0) u.apply(buffs, lvl);
+  }
+  for (const r of RESEARCH) {
+    const lvl = state.research[r.id] || 0;
+    if (lvl > 0) r.apply(buffs, lvl);
+  }
+}
+
+function totalPower() {
+  const depthMult = 1 + buffs.depthBonus * state.depth;
+  return buffs.clickMult * buffs.researchClickMult * buffs.voidMult * depthMult *
+         (state.currentWorld === 2 ? buffs.volcanicMult : 1);
+}
+
+function pickOreToMine() {
+  const candidates = getOres(state.currentWorld)
+    .filter(([_, o]) => state.depth >= o.minDepth)
+    .map(([id, o]) => {
+      const w = Math.max(0.5, 100 / Math.sqrt(o.value));
+      return { id, o, w };
+    });
+  if (candidates.length === 0) return null;
+  const total = candidates.reduce((s, c) => s + c.w, 0);
+  let r = Math.random() * total;
+  for (const c of candidates) {
+    r -= c.w;
+    if (r <= 0) return c;
+  }
+  return candidates[0];
+}
+
+function mineOnce(isAuto = false) {
+  const pick = pickOreToMine();
+  if (!pick) return;
+  let amount = totalPower() * (isAuto ? 0.6 : 1);
+  amount = Math.max(1, Math.floor(amount));
+  if (Math.random() < buffs.doubleChance) amount *= 2;
+  state.ores[pick.id] = (state.ores[pick.id] || 0) + amount;
+  // Mining no longer earns credits — sell ore at the Market for credits
+  state.totalMined += amount;
+  if (!isAuto) {
+    state.totalClicks++;
+    spawnParticle(pick.o);
+    document.getElementById('rig-bit').classList.add('mining');
+    clearTimeout(window._drillTo);
+    window._drillTo = setTimeout(() => {
+      document.getElementById('rig-bit').classList.remove('mining');
+    }, 200);
+  }
+}
+
+function spawnParticle(o) {
+  const canvas = document.getElementById('shaft-canvas');
+  if (!canvas) return;
+  const p = document.createElement('div');
+  p.className = 'ore-particle';
+  p.textContent = o.sym;
+  p.style.color = o.color;
+  const rect = canvas.getBoundingClientRect();
+  p.style.left = (rect.width/2 - 10 + (Math.random()-0.5)*80) + 'px';
+  p.style.bottom = '100px';
+  canvas.appendChild(p);
+  setTimeout(() => p.remove(), 1200);
+}
+
+function digDeeper(amount = 1) {
+  const layer = currentLayer();
+  const oreId = layer.digOre;
+  const have = state.ores[oreId] || 0;
+  const oreCost = digOreCost();
+  if (have < oreCost) {
+    const oreName = ORES[oreId]?.name || oreId;
+    toast(`✕ NEED ${oreCost} ${oreName.toUpperCase()}`);
+    return false;
+  }
+  state.ores[oreId] = have - oreCost;
+  const cost = digCost();
+  state.digProgress += amount * buffs.digSpeedMult;
+  if (state.digProgress >= cost) {
+    const overflow = state.digProgress - cost;
+    state.depth += 1;
+    if (state.depth > state.maxDepth) state.maxDepth = state.depth;
+    state.digProgress = overflow;
+    checkOreUnlocks();
+    checkLayerChange();
+  }
+  return true;
+}
+
+let lastUnlockedOres = new Set();
+function checkOreUnlocks() {
+  for (const [id, o] of getOres(state.currentWorld)) {
+    if (state.depth >= o.minDepth && !lastUnlockedOres.has(id)) {
+      lastUnlockedOres.add(id);
+      if (state.depth > 0) toast(`◆ NEW ORE: ${o.name.toUpperCase()}`);
+    }
+  }
+}
+
+let lastLayerName = '';
+function checkLayerChange() {
+  const l = currentLayer();
+  if (l.name !== lastLayerName) {
+    lastLayerName = l.name;
+    if (state.depth > 0) {
+      const oreDef = ORES[l.digOre];
+      toast(`▼ ${l.name} · DIG NEEDS ${oreDef?.name.toUpperCase() || l.digOre.toUpperCase()}`);
+    }
+  }
+}
+
+function buyUpgrade(u) {
+  const lvl = state.upgrades[u.id] || 0;
+  if (lvl >= u.maxLevel) return;
+  const cost = upgradeCost(u);
+  if (state.credits < cost) { toast('✕ INSUFFICIENT CREDITS'); return; }
+  state.credits -= cost;
+  state.upgrades[u.id] = lvl + 1;
+  recalcBuffs();
+  toast(`✓ ${u.name} → LV.${lvl+1}`);
+}
+
+function buyResearch(r) {
+  const lvl = state.research[r.id] || 0;
+  if (lvl >= r.maxLevel) return;
+  if (!researchAvailable(r)) return;
+  const cost = r.cost(lvl);
+  if (!canAfford(cost)) { toast('✕ INSUFFICIENT MATERIALS'); return; }
+  pay(cost);
+  state.research[r.id] = lvl + 1;
+  recalcBuffs();
+  toast(`✓ ${r.name.toUpperCase()} LV.${lvl+1}`);
+}
+
+function unlockWorld(w) {
+  if (state.unlockedWorlds.includes(w.id)) return;
+  if (!canAfford(w.cost)) { toast('✕ INSUFFICIENT RESOURCES'); return; }
+  pay(w.cost);
+  state.unlockedWorlds.push(w.id);
+  toast(`◉ UNLOCKED: ${w.name.toUpperCase()}`);
+}
+
+function switchWorld(wid) {
+  if (!state.unlockedWorlds.includes(wid)) return;
+  if (state.currentWorld === wid) return;
+  state.currentWorld = wid;
+  state.depth = 0;
+  state.digProgress = 0;
+  lastUnlockedOres = new Set();
+  lastLayerName = '';
+  checkOreUnlocks();
+  checkLayerChange();
+  toast(`▶ ${WORLDS[wid].name.toUpperCase()}`);
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderHeader() {
+  document.getElementById('credits').textContent = '◈' + fmt(state.credits);
+  document.getElementById('power').textContent = totalPower().toFixed(1) + '×';
+  const w = WORLDS[state.currentWorld];
+  document.getElementById('world-badge').innerHTML = `${w.sub} // <span>${w.name.toUpperCase()}</span>`;
+}
+
+function renderShaft() {
+  document.getElementById('depth-display').textContent = fmt(state.depth) + 'm';
+  const l = currentLayer();
+  document.getElementById('layer-name').textContent = l.name;
+  document.getElementById('layer-sub').textContent = l.sub;
+  const bg = document.getElementById('shaft-bg');
+  bg.style.setProperty('--layer-top', l.top);
+  bg.style.setProperty('--layer-mid', l.mid);
+  bg.style.setProperty('--layer-bot', l.bot);
+  const cost = digCost();
+  const pct = Math.min(100, (state.digProgress / cost) * 100);
+  document.getElementById('dig-fill').style.width = pct + '%';
+  document.getElementById('dig-progress-text').textContent = `${fmt(state.digProgress)} / ${fmt(cost)}`;
+
+  // Dig ore cost UI
+  const oreId = l.digOre;
+  const oreDef = ORES[oreId];
+  const have = state.ores[oreId] || 0;
+  const oreCost = digOreCost();
+  const canPay = have >= oreCost;
+  const btn = document.getElementById('dig-btn');
+  btn.disabled = !canPay;
+  const costEl = document.getElementById('dig-btn-cost');
+  costEl.classList.toggle('lack', !canPay);
+  costEl.style.setProperty('--cost-color', oreDef?.color || 'var(--amber-bright)');
+  costEl.innerHTML = oreDef
+    ? `COST: <span class="sym">${oreDef.sym}</span> ${fmt(have)} / ${oreCost} ${oreDef.name.toUpperCase()}`
+    : `COST: ${oreCost}`;
+
+  updateDepthWorld();
+  updateNextLayerPill(l);
+}
+
+// ============================================================
+// DEPTH WORLD RENDERING
+// Visual model: rock walls, layer bands, ore sparkles and meter ticks live in a
+// scrollable column that is taller than the viewport. We translate this column
+// upward as depth increases — the drill sits at a fixed "sight line" while the
+// world scrolls past. Static elements rebuild once per world (cheap), dynamic
+// scroll updates happen every tick (just a transform).
+// ============================================================
+
+const PX_PER_METER = 4; // 1 meter = 4 pixels in the scroll world
+// Where the drill sight-line falls in the canvas (bottom-offset). Must match rig position.
+// Rig is at bottom: 16px + 130px tall = drill tip roughly at bottom: 16-24px.
+// Visually the "current depth" line should be near the drill tip area.
+const SIGHT_LINE_FROM_TOP_PERCENT = 0.78; // sight line near drill tip (bottom of canvas)
+
+let _depthWorldLastKey = null;
+function buildDepthWorldForCurrentSector() {
+  // Rebuild only when world changes (static content per world)
+  const key = state.currentWorld;
+  if (_depthWorldLastKey === key) return;
+  _depthWorldLastKey = key;
+
+  const content = document.getElementById('depth-content');
+  const ruler = document.getElementById('depth-ruler');
+  if (!content || !ruler) return;
+
+  const layers = LAYERS[state.currentWorld];
+  const lastLayer = layers[layers.length - 1];
+  const maxDepth = lastLayer.depth + 600; // render a buffer past the last layer
+
+  // Set the scroll container's height so translate has real content to scroll
+  const scroll = document.getElementById('depth-scroll');
+  if (scroll) scroll.style.height = (maxDepth * PX_PER_METER) + 'px';
+
+  // --- Ruler: tick every 10m, major every 50m with label ---
+  let rulerHtml = '';
+  for (let d = 0; d <= maxDepth; d += 10) {
+    const major = d % 50 === 0;
+    const y = d * PX_PER_METER;
+    rulerHtml += `<div class="depth-tick ${major ? 'major' : ''}" style="top:${y}px">
+      <div class="depth-tick-line"></div>
+      ${major ? `<div class="depth-tick-label">${d}m</div>` : ''}
+    </div>`;
+  }
+  ruler.innerHTML = rulerHtml;
+
+  // --- Build the veins + striations as a single SVG background layer ---
+  const veinsHtml = buildOreVeinsSVG(maxDepth, layers);
+
+  // --- Layer bands and ore sparkles in the main content ---
+  let contentHtml = veinsHtml;
+
+  // Layer boundary bands (skip depth 0 since that's the surface)
+  for (const layer of layers) {
+    if (layer.depth === 0) continue;
+    const y = layer.depth * PX_PER_METER;
+    contentHtml += `<div class="layer-band" style="top:${y}px">
+      <div class="layer-band-line"></div>
+      <div class="layer-band-label">${layer.name}</div>
+    </div>`;
+  }
+
+  // Ore sparkles at each ore's minDepth (random x position, seeded by id for consistency)
+  const worldOres = Object.entries(ORES).filter(([_, o]) => o.world === state.currentWorld);
+  for (const [oreId, o] of worldOres) {
+    if (o.minDepth === 0) continue; // skip surface-tier ore
+    const seed = oreId.charCodeAt(0) + oreId.charCodeAt(1) * 7;
+    for (let i = 0; i < 3; i++) {
+      const xFrac = 0.15 + ((seed + i * 37) % 70) / 100;
+      const yOffset = ((seed + i * 13) % 20) - 10;
+      const y = o.minDepth * PX_PER_METER + yOffset;
+      const delay = ((seed + i) % 30) / 10;
+      contentHtml += `<span class="ore-sparkle"
+        style="top:${y}px; left:${(xFrac * 100).toFixed(1)}%; color:${o.color}; animation-delay:${delay}s;"
+      >${o.sym}</span>`;
+    }
+  }
+
+  content.innerHTML = contentHtml;
+}
+
+// Build ore vein SVG layer — wiggly vertical veins colored by the ore that dominates at each depth,
+// plus faint horizontal striations to break up large black/empty areas.
+function buildOreVeinsSVG(maxDepth, layers) {
+  const heightPx = maxDepth * PX_PER_METER;
+  // Small seeded pseudo-random so the same world always draws identical veins
+  let seed = (state.currentWorld + 1) * 12345;
+  const rand = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+
+  // Ores in this world, sorted by depth
+  const worldOres = Object.entries(ORES)
+    .filter(([_, o]) => o.world === state.currentWorld)
+    .sort((a, b) => a[1].minDepth - b[1].minDepth);
+
+  // Pick a color for a given depth: blend toward the deepest-unlocked ore at that depth
+  function colorAt(depth) {
+    let chosen = worldOres[0]?.[1];
+    for (const [_, o] of worldOres) {
+      if (depth >= o.minDepth) chosen = o;
+    }
+    return chosen?.color || '#8a6a45';
+  }
+
+  const width = 100; // viewBox units = percent of shaft width
+  let paths = '';
+
+  // ---- Vertical ore veins ----
+  // Generate ~3 veins per 100m of world — dense enough to feel rocky, sparse enough to read
+  const veinCount = Math.ceil((maxDepth / 100) * 3);
+  for (let v = 0; v < veinCount; v++) {
+    // Random vertical extent: veins span 80–220 meters
+    const veinHeight = (80 + rand() * 140) * PX_PER_METER;
+    const startY = rand() * (heightPx - veinHeight);
+    const endY = startY + veinHeight;
+    const startX = 6 + rand() * 88; // avoid exact edges
+
+    // Color from the midpoint depth of the vein
+    const midDepth = ((startY + endY) / 2) / PX_PER_METER;
+    const color = colorAt(midDepth);
+
+    // Build a wiggly path with multiple Bezier control points
+    const segments = 6 + Math.floor(rand() * 4); // 6-9 segments per vein
+    let d = `M ${startX.toFixed(1)} ${startY.toFixed(1)}`;
+    let prevX = startX;
+    for (let s = 1; s <= segments; s++) {
+      const t = s / segments;
+      const targetY = startY + (endY - startY) * t;
+      // Each segment drifts horizontally within ±8 units
+      const drift = (rand() - 0.5) * 16;
+      const nextX = Math.max(4, Math.min(96, prevX + drift));
+      // Control point for smooth curve
+      const ctrlY = startY + (endY - startY) * (t - 0.5 / segments);
+      const ctrlX = (prevX + nextX) / 2 + (rand() - 0.5) * 8;
+      d += ` Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${nextX.toFixed(1)} ${targetY.toFixed(1)}`;
+      prevX = nextX;
+    }
+
+    // Opacity varies per vein for layered depth feel
+    const opacity = (0.18 + rand() * 0.28).toFixed(2);
+    const strokeWidth = (0.6 + rand() * 1.1).toFixed(2);
+    paths += `<path d="${d}" stroke="${color}" stroke-width="${strokeWidth}" fill="none" opacity="${opacity}" stroke-linecap="round"/>`;
+
+    // Occasional branch/tributary for richer vein feel (30% chance)
+    if (rand() < 0.3) {
+      const branchStartT = 0.3 + rand() * 0.4; // branch from the middle-ish
+      const branchStartY = startY + (endY - startY) * branchStartT;
+      const branchStartX = startX + (prevX - startX) * branchStartT;
+      const branchLen = (20 + rand() * 40) * PX_PER_METER;
+      const branchEndY = branchStartY + branchLen * (rand() > 0.5 ? 1 : -1);
+      const branchEndX = branchStartX + (rand() - 0.5) * 20;
+      paths += `<path d="M ${branchStartX.toFixed(1)} ${branchStartY.toFixed(1)} Q ${((branchStartX + branchEndX) / 2).toFixed(1)} ${((branchStartY + branchEndY) / 2).toFixed(1)} ${branchEndX.toFixed(1)} ${branchEndY.toFixed(1)}"
+        stroke="${color}" stroke-width="${(strokeWidth * 0.7).toFixed(2)}" fill="none" opacity="${(opacity * 0.8).toFixed(2)}" stroke-linecap="round"/>`;
+    }
+  }
+
+  // ---- Horizontal rock striations — faint cracks every 15-40m for texture ----
+  let striationY = 0;
+  while (striationY < heightPx) {
+    striationY += (15 + rand() * 25) * PX_PER_METER;
+    if (striationY >= heightPx) break;
+    // Striations are just short dashes scattered across width
+    const dashCount = 2 + Math.floor(rand() * 3);
+    for (let d = 0; d < dashCount; d++) {
+      const x = 8 + rand() * 84;
+      const len = 4 + rand() * 14;
+      const yOff = (rand() - 0.5) * 6;
+      paths += `<line x1="${x.toFixed(1)}" y1="${(striationY + yOff).toFixed(1)}" x2="${(x + len).toFixed(1)}" y2="${(striationY + yOff + (rand() - 0.5) * 2).toFixed(1)}" stroke="rgba(0,0,0,0.35)" stroke-width="0.5"/>`;
+    }
+  }
+
+  // The SVG has to set an absolute height in pixels and preserve the viewBox aspect
+  return `<svg class="vein-layer" viewBox="0 0 ${width} ${heightPx}" preserveAspectRatio="none"
+    style="position:absolute; top:0; left:0; width:100%; height:${heightPx}px; pointer-events:none; z-index:0;"
+    xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+}
+
+function updateDepthWorld() {
+  buildDepthWorldForCurrentSector();
+  const scroll = document.getElementById('depth-scroll');
+  if (!scroll) return;
+  // Compute translate: drill sight-line sits at SIGHT_LINE_FROM_TOP_PERCENT of the canvas
+  // We want state.depth to land at that y-position in the viewport.
+  const canvas = document.getElementById('shaft-canvas');
+  if (!canvas) return;
+  const canvasH = canvas.clientHeight;
+  const sightY = canvasH * SIGHT_LINE_FROM_TOP_PERCENT;
+  const offset = state.depth * PX_PER_METER - sightY;
+  scroll.style.transform = `translateY(${-offset}px)`;
+}
+
+function updateNextLayerPill(layer) {
+  const pill = document.getElementById('next-layer-pill');
+  if (!pill) return;
+  const layers = LAYERS[state.currentWorld];
+  const idx = layers.indexOf(layer);
+  const next = layers[idx + 1];
+  if (!next) {
+    pill.style.display = 'none';
+    return;
+  }
+  const remaining = Math.max(0, next.depth - state.depth);
+  pill.style.display = 'block';
+  pill.textContent = `▼ ${next.name} IN ${remaining}m`;
+  pill.classList.toggle('close', remaining <= 5);
+}
+
+function renderOreStrip() {
+  const strip = document.getElementById('ore-strip');
+  const ores = getOres(state.currentWorld);
+  strip.innerHTML = ores.map(([id, o]) => {
+    const count = state.ores[id] || 0;
+    const locked = state.depth < o.minDepth;
+    return `<div class="ore-chip ${locked ? 'locked' : ''}">
+      <span class="ore-chip-sym" style="--ore-color:${o.color}">${o.sym}</span>
+      <span class="ore-chip-count">${locked ? '—' : fmt(count)}</span>
+    </div>`;
+  }).join('');
+}
+
+// Per-item slider position cache, persists across re-renders so live ticks don't reset the slider
+const sellAmounts = {};
+// Suppress live re-render while user is actively dragging a slider or holding a button
+let _stashInteracting = false;
+
+function renderInventory() {
+  const list = document.getElementById('ore-list');
+  const ores = getOres(state.currentWorld);
+
+  // Helper to render a single row with slider-based sell controls
+  const renderRow = (id, def, count, locked = false, depthGate = null) => {
+    const price = sellPrice(id);
+    const canSell = !locked && count > 0;
+    // Default amount is whatever the user previously selected (cached) or 0 if fresh
+    const initialAmt = canSell ? Math.min(count, sellAmounts[id] || 0) : 0;
+    return `<div class="ore-row ${locked ? 'locked' : ''}">
+      <div class="ore-icon" style="--ore-color:${def.color}">${def.sym}</div>
+      <div class="ore-info">
+        <div class="ore-name">${locked ? '???' : def.name}</div>
+        <div class="ore-depth">${locked ? `Unlocks at ${depthGate}m` : `◈${fmt(price)} ea`}</div>
+      </div>
+      <div>
+        <div class="ore-count" style="--ore-color:${def.color}">${locked ? '—' : fmt(count)}</div>
+      </div>
+      ${locked ? '' : `<div class="ore-sell-row">
+        <div class="ore-sell-presets">
+          <button class="preset-btn" data-preset="${id}" data-pct="25" ${count >= 4 ? '' : 'disabled'}>25%</button>
+          <button class="preset-btn" data-preset="${id}" data-pct="50" ${count >= 2 ? '' : 'disabled'}>50%</button>
+          <button class="preset-btn" data-preset="${id}" data-pct="75" ${count >= 2 ? '' : 'disabled'}>75%</button>
+          <button class="preset-btn" data-preset="${id}" data-pct="100" ${canSell ? '' : 'disabled'}>ALL</button>
+        </div>
+        <div class="ore-sell-slider-row">
+          <input type="range" class="sell-slider" data-slider="${id}" min="0" max="${count}" value="${initialAmt}" ${canSell ? '' : 'disabled'}>
+        </div>
+        <div class="sell-action">
+          <div class="sell-summary">
+            Sell <span class="qty" data-summary-qty="${id}">${fmt(initialAmt)}</span>
+            for <span class="credits" data-summary-credits="${id}">◈${fmt(initialAmt * price)}</span>
+          </div>
+          <button class="sell-go-btn" data-sell="${id}" ${initialAmt > 0 ? '' : 'disabled'}>SELL</button>
+        </div>
+      </div>`}
+    </div>`;
+  };
+
+  // Section 1: Raw ore for current world
+  let html = `<div class="stash-section-head">
+    <span>Raw Ore · ${WORLDS[state.currentWorld].name}</span>
+    <span class="count">${ores.length}</span>
+  </div>`;
+  html += ores.map(([id, o]) => {
+    const count = state.ores[id] || 0;
+    const locked = state.depth < o.minDepth;
+    return renderRow(id, o, count, locked, o.minDepth);
+  }).join('');
+
+  // Section 2: Ingots (any owned)
+  const ownedIngots = Object.entries(INGOTS).filter(([id]) => (state.items[id] || 0) > 0);
+  if (ownedIngots.length > 0) {
+    html += `<div class="stash-section-head">
+      <span>Ingots</span>
+      <span class="count">${ownedIngots.length}</span>
+    </div>`;
+    html += ownedIngots.map(([id, def]) => renderRow(id, def, state.items[id])).join('');
+  }
+
+  // Section 3: Alloys
+  const ownedAlloys = Object.entries(ALLOYS).filter(([id]) => (state.items[id] || 0) > 0);
+  if (ownedAlloys.length > 0) {
+    html += `<div class="stash-section-head">
+      <span>Alloys</span>
+      <span class="count">${ownedAlloys.length}</span>
+    </div>`;
+    html += ownedAlloys.map(([id, def]) => renderRow(id, def, state.items[id])).join('');
+  }
+
+  // Section 4: Composites
+  const ownedComp = Object.entries(COMPOSITES).filter(([id]) => (state.items[id] || 0) > 0);
+  if (ownedComp.length > 0) {
+    html += `<div class="stash-section-head">
+      <span>Composites</span>
+      <span class="count">${ownedComp.length}</span>
+    </div>`;
+    html += ownedComp.map(([id, def]) => renderRow(id, def, state.items[id])).join('');
+  }
+
+  list.innerHTML = html;
+
+  // ── Helpers for the slider/preset UI ──
+  function updateRowDisplay(id) {
+    const have = getQty(id);
+    const price = sellPrice(id);
+    const amt = Math.min(sellAmounts[id] || 0, have);
+    const slider = list.querySelector(`[data-slider="${id}"]`);
+    const qtyEl  = list.querySelector(`[data-summary-qty="${id}"]`);
+    const credEl = list.querySelector(`[data-summary-credits="${id}"]`);
+    const sellBtn = list.querySelector(`.sell-go-btn[data-sell="${id}"]`);
+    if (slider && parseInt(slider.value) !== amt) slider.value = amt;
+    if (qtyEl) qtyEl.textContent = fmt(amt);
+    if (credEl) credEl.textContent = '◈' + fmt(amt * price);
+    if (sellBtn) sellBtn.disabled = amt <= 0;
+  }
+
+  // Slider drag → update summary live; flag interaction so tick doesn't rebuild mid-drag
+  list.querySelectorAll('[data-slider]').forEach(slider => {
+    slider.addEventListener('input', (e) => {
+      const id = slider.dataset.slider;
+      sellAmounts[id] = parseInt(slider.value) || 0;
+      updateRowDisplay(id);
+    });
+    slider.addEventListener('pointerdown', () => { _stashInteracting = true; });
+    slider.addEventListener('pointerup',   () => { _stashInteracting = false; });
+    slider.addEventListener('pointercancel', () => { _stashInteracting = false; });
+    slider.addEventListener('lostpointercapture', () => { _stashInteracting = false; });
+  });
+
+  // Preset buttons (25/50/75/ALL) → snap slider, update display, no auto-sell
+  list.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.preset;
+      const pct = parseInt(btn.dataset.pct);
+      const have = getQty(id);
+      const amt = pct === 100 ? have : Math.max(1, Math.floor(have * pct / 100));
+      sellAmounts[id] = amt;
+      updateRowDisplay(id);
+    });
+  });
+
+  // SELL button → confirm for ≥100, otherwise instant
+  list.querySelectorAll('.sell-go-btn[data-sell]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.sell;
+      const have = getQty(id);
+      const amt = Math.min(sellAmounts[id] || 0, have);
+      if (amt <= 0) return;
+
+      const doSell = () => {
+        const result = sellItem(id, amt);
+        if (result) {
+          toast(`✓ SOLD ${fmt(result.qty)} · +◈${fmt(result.price)}`);
+          // Reset cached slider amount after sale
+          sellAmounts[id] = 0;
+          renderHeader();
+          renderInventory();
+        }
+      };
+
+      if (amt < 100) {
+        doSell();
+      } else {
+        const def = getItemDef(id);
+        const price = sellPrice(id) * amt;
+        showConfirm({
+          title: 'CONFIRM SALE',
+          body: `Sell <b style="color:${def.color}">${fmt(amt)}× ${def.name}</b> for <b style="color:var(--amber-bright)">◈${fmt(price)}</b>?`,
+          confirmLabel: 'SELL',
+          onConfirm: doSell,
+        });
+      }
+    });
+  });
+}
+
+function renderUpgrades() {
+  const c = document.getElementById('cards-gear');
+  c.innerHTML = UPGRADES.map(u => {
+    const lvl = state.upgrades[u.id] || 0;
+    const maxed = lvl >= u.maxLevel;
+    const cost = maxed ? 0 : upgradeCost(u);
+    const afford = state.credits >= cost;
+    return `<div class="card ${maxed ? 'maxed' : ''}" data-upgrade="${u.id}">
+      <div class="card-head">
+        <div class="card-name">${u.name}</div>
+        <div class="card-level">LV ${lvl}/${u.maxLevel}</div>
+      </div>
+      <div class="card-desc">${u.desc}</div>
+      <div class="card-effect">▸ ${u.effect(lvl)}</div>
+      ${maxed ? '<div class="card-cost"><span style="color:var(--emerald)">✓ MAXED</span></div>' :
+        `<div class="card-cost"><div class="cost-item">
+          <span class="cost-amount ${afford ? '' : 'lack'}">◈ ${fmt(cost)}</span>
+        </div></div>`}
+    </div>`;
+  }).join('');
+  c.querySelectorAll('[data-upgrade]').forEach(el => {
+    el.addEventListener('click', () => {
+      const u = UPGRADES.find(x => x.id === el.dataset.upgrade);
+      buyUpgrade(u);
+      renderAll();
+    });
+  });
+}
+
+// Track currently active forge tier tab (1, 2, or 3)
+let forgeTierTab = 1;
+
+function renderForge() {
+  const c = document.getElementById('forge-content');
+
+  // Locked screen if Forge isn't unlocked yet
+  if (!state.forgeUnlocked) {
+    const depthOk = state.depth >= FORGE_UNLOCK.depth;
+    const credOk = state.credits >= FORGE_UNLOCK.credits;
+    c.innerHTML = `<div class="forge-locked">
+      <div class="big">FORGE</div>
+      <div>Smelt raw ore into ingots, then combine ingots into alloys and composites for advanced research.</div>
+      <div class="req">
+        <div class="row">
+          <span>Depth</span>
+          <span class="${depthOk ? 'ok' : 'lack'}">${fmt(state.depth)}m / ${FORGE_UNLOCK.depth}m</span>
+        </div>
+        <div class="row">
+          <span>Credits</span>
+          <span class="${credOk ? 'ok' : 'lack'}">◈${fmt(state.credits)} / ◈${fmt(FORGE_UNLOCK.credits)}</span>
+        </div>
+      </div>
+      <button class="unlock-btn" id="btn-unlock-forge" ${depthOk && credOk ? '' : 'disabled'}>UNLOCK FORGE</button>
+    </div>`;
+    const btn = document.getElementById('btn-unlock-forge');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (tryUnlockForge()) renderAll();
+      });
+    }
+    return;
+  }
+
+  // Active smelt slots header
+  const queue = state.smeltQueue || [];
+  const now = Date.now();
+  let slotsHtml = `<div class="smelt-slots">
+    <div class="smelt-slots-title">
+      <span>Smelter Slots</span>
+      <span>${queue.length} / ${SMELT_SLOTS}</span>
+    </div>`;
+  for (let i = 0; i < SMELT_SLOTS; i++) {
+    const job = queue[i];
+    if (job) {
+      const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
+      const def = recipe ? getItemDef(recipe.output) : null;
+      const total = job.endTime - job.startTime;
+      const elapsed = now - job.startTime;
+      const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+      const remaining = Math.max(0, Math.ceil((job.endTime - now) / 1000));
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      const timeStr = mins > 0 ? `${mins}m${secs.toString().padStart(2,'0')}s` : `${secs}s`;
+      slotsHtml += `<div class="smelt-slot">
+        <div class="smelt-slot-icon" style="--ore-color:${def?.color || '#fff'}">${def?.sym || '?'}</div>
+        <div class="smelt-slot-info">
+          <div class="smelt-slot-name">${def?.name || 'Unknown'}</div>
+          <div class="smelt-slot-bar"><div class="smelt-slot-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="smelt-slot-time">${timeStr}</div>
+        <button class="smelt-cancel" data-cancel-slot="${i}" aria-label="Cancel smelt">✕</button>
+      </div>`;
+    } else {
+      slotsHtml += `<div class="smelt-slot empty">
+        <div class="smelt-slot-name">· EMPTY SLOT ·</div>
+      </div>`;
+    }
+  }
+  slotsHtml += '</div>';
+
+  // Tier tabs
+  const tierLabels = { 1: 'Ingots', 2: 'Alloys', 3: 'Composites' };
+  let tabsHtml = `<div class="forge-tabs">`;
+  for (const t of [1, 2, 3]) {
+    tabsHtml += `<button class="${forgeTierTab === t ? 'active' : ''}" data-forge-tier="${t}">T${t} ${tierLabels[t]}</button>`;
+  }
+  tabsHtml += `</div>`;
+
+  // Recipes for current tier (filter by tier; T3 includes T4 composites)
+  const recipes = SMELT_RECIPES.filter(r => {
+    if (forgeTierTab === 1) return r.tier === 1;
+    if (forgeTierTab === 2) return r.tier === 2;
+    return r.tier >= 3;
+  });
+
+  // Only show recipes the player can plausibly make: at least one input ever obtainable
+  // (i.e., output's world is unlocked OR they have inputs already)
+  const visibleRecipes = recipes.filter(r => {
+    const def = getItemDef(r.output);
+    if (!def) return false;
+    if (def.world != null && !state.unlockedWorlds.includes(def.world)) {
+      // hide if no inputs owned and world locked
+      return Object.keys(r.inputs).some(k => getQty(k) > 0);
+    }
+    return true;
+  });
+
+  let recipesHtml = `<div class="recipe-list">`;
+  if (visibleRecipes.length === 0) {
+    recipesHtml += `<div class="empty">▼ NO RECIPES<br>AVAILABLE</div>`;
+  } else {
+    for (const r of visibleRecipes) {
+      const def = getItemDef(r.output);
+      const afford = canAfford(r.inputs);
+      const queueFull = queue.length >= SMELT_SLOTS;
+      const disabled = !afford || queueFull;
+      const timeStr = r.time >= 60 ? `${Math.floor(r.time/60)}m${(r.time%60).toString().padStart(2,'0')}s` : `${r.time}s`;
+      const autoOn = !!(state.autoSmelt && state.autoSmelt[r.id]);
+      recipesHtml += `<div class="recipe-card ${disabled ? 'disabled' : ''}" data-recipe="${r.id}">
+        <div class="recipe-head">
+          <div class="recipe-output-icon" style="--ore-color:${def?.color || '#fff'}">${def?.sym || '?'}</div>
+          <div>
+            <div class="recipe-name">${def?.name || r.output}</div>
+            <div class="recipe-time">⏱ ${timeStr}</div>
+          </div>
+          <div class="recipe-yield">+${r.qty}</div>
+        </div>
+        <div class="recipe-inputs">
+          ${Object.entries(r.inputs).map(([id, amt]) => {
+            const inDef = getItemDef(id);
+            const have = getQty(id);
+            const ok = have >= amt;
+            return `<div class="recipe-input">
+              <span class="sym" style="--ore-color:${inDef?.color || '#fff'}; color:${inDef?.color || '#fff'}; text-shadow:0 0 4px ${inDef?.color || '#fff'}">${inDef?.sym || '?'}</span>
+              <span class="amt ${ok ? 'ok' : 'lack'}">${fmt(have)}/${fmt(amt)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="recipe-footer">
+          <button class="auto-toggle ${autoOn ? 'on' : ''}" data-auto="${r.id}">
+            <span class="auto-dot"></span>
+            <span class="auto-label">AUTO-SMELT ${autoOn ? 'ON' : 'OFF'}</span>
+          </button>
+          <span class="recipe-tap-hint">${disabled ? (queueFull ? 'SLOTS FULL' : 'NEED MATERIALS') : 'TAP TO SMELT →'}</span>
+        </div>
+      </div>`;
+    }
+  }
+  recipesHtml += `</div>`;
+
+  c.innerHTML = slotsHtml + tabsHtml + recipesHtml;
+
+  // Wire tier tabs
+  c.querySelectorAll('[data-forge-tier]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      forgeTierTab = parseInt(btn.dataset.forgeTier);
+      renderForge();
+    });
+  });
+
+  // Wire recipe cards
+  c.querySelectorAll('[data-recipe]').forEach(card => {
+    card.addEventListener('click', () => {
+      const rid = card.dataset.recipe;
+      if (startSmelt(rid)) {
+        renderForge();
+        renderInventory();
+        renderHeader();
+      }
+    });
+  });
+
+  // Wire auto-smelt toggles (must stopPropagation so tap doesn't fall through to card)
+  c.querySelectorAll('[data-auto]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rid = btn.dataset.auto;
+      if (!state.autoSmelt) state.autoSmelt = {};
+      state.autoSmelt[rid] = !state.autoSmelt[rid];
+      toast(`◉ AUTO-SMELT ${state.autoSmelt[rid] ? 'ON' : 'OFF'}`);
+      renderForge();
+    });
+  });
+
+  // Wire cancel-slot buttons
+  c.querySelectorAll('[data-cancel-slot]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const slotIdx = parseInt(btn.dataset.cancelSlot);
+      cancelSmelt(slotIdx);
+    });
+  });
+}
+
+function renderResearch() {
+  const c = document.getElementById('research-content');
+
+  // Locked screen if Lab not unlocked
+  if (!state.labUnlocked) {
+    const depthOk = state.depth >= LAB_UNLOCK.depth;
+    const credOk = state.credits >= LAB_UNLOCK.credits;
+    c.innerHTML = `<div class="forge-locked">
+      <div class="big">LAB</div>
+      <div>Spend ingots, alloys, and composites on permanent upgrades to your mining operation.</div>
+      <div class="req">
+        <div class="row">
+          <span>Depth</span>
+          <span class="${depthOk ? 'ok' : 'lack'}">${fmt(state.depth)}m / ${LAB_UNLOCK.depth}m</span>
+        </div>
+        <div class="row">
+          <span>Credits</span>
+          <span class="${credOk ? 'ok' : 'lack'}">◈${fmt(state.credits)} / ◈${fmt(LAB_UNLOCK.credits)}</span>
+        </div>
+      </div>
+      <button class="unlock-btn" id="btn-unlock-lab" ${depthOk && credOk ? '' : 'disabled'}>UNLOCK LAB</button>
+    </div>`;
+    const btn = document.getElementById('btn-unlock-lab');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (tryUnlockLab()) renderAll();
+      });
+    }
+    return;
+  }
+
+  const visible = RESEARCH.filter(r => researchAvailable(r) || state.research[r.id]);
+  if (visible.length === 0) {
+    c.innerHTML = '<div class="cards"><div class="empty">▼ DIG DEEPER<br>TO UNLOCK<br>RESEARCH</div></div>';
+    return;
+  }
+  c.innerHTML = '<div class="cards">' + visible.map(r => {
+    const lvl = state.research[r.id] || 0;
+    const avail = researchAvailable(r);
+    const maxed = lvl >= r.maxLevel;
+    const cost = maxed ? null : r.cost(lvl);
+    return `<div class="card ${!avail ? 'locked' : maxed ? 'maxed' : ''}" data-research="${r.id}">
+      <div class="card-head">
+        <div class="card-name">${r.name}</div>
+        <div class="card-level">LV ${lvl}/${r.maxLevel}</div>
+      </div>
+      <div class="card-desc">${r.desc}</div>
+      <div class="card-effect">▸ ${r.effect(lvl)}</div>
+      ${maxed ? '<div class="card-cost"><span style="color:var(--emerald)">✓ MAXED</span></div>' :
+        `<div class="card-cost">${Object.entries(cost).map(([k, v]) => {
+          const have = getQty(k);
+          const ok = have >= v;
+          const def = getItemDef(k);
+          const sym = def ? def.sym : (k === 'credits' ? '◈' : '?');
+          const color = def ? def.color : 'var(--amber-bright)';
+          return `<div class="cost-item">
+            <span style="color:${color};text-shadow:0 0 4px ${color}">${sym}</span>
+            <span class="cost-amount ${ok ? '' : 'lack'}">${fmt(v)}</span>
+          </div>`;
+        }).join('')}</div>`}
+    </div>`;
+  }).join('') + '</div>';
+  c.querySelectorAll('[data-research]').forEach(el => {
+    el.addEventListener('click', () => {
+      const r = RESEARCH.find(x => x.id === el.dataset.research);
+      buyResearch(r);
+      renderAll();
+    });
+  });
+}
+
+function renderWorlds() {
+  const c = document.getElementById('cards-worlds');
+  c.innerHTML = WORLDS.map(w => {
+    const unlocked = state.unlockedWorlds.includes(w.id);
+    const current = state.currentWorld === w.id;
+    return `<div class="card world-card ${current ? 'current' : ''}" data-world="${w.id}">
+      <div class="card-head">
+        <div class="card-name">${w.name}</div>
+        <div class="card-level">${w.sub}</div>
+      </div>
+      <div class="card-desc">${w.desc}</div>
+      ${unlocked
+        ? (current ? '' : '<div class="card-effect">▸ TAP TO TRANSFER</div>')
+        : `<div class="card-cost">${Object.entries(w.cost).map(([k, v]) => {
+            const have = getQty(k);
+            const ok = have >= v;
+            const def = getItemDef(k);
+            const sym = def ? def.sym : (k === 'credits' ? '◈' : '?');
+            const color = def ? def.color : 'var(--amber-bright)';
+            return `<div class="cost-item">
+              <span style="color:${color};text-shadow:0 0 4px ${color}">${sym}</span>
+              <span class="cost-amount ${ok ? '' : 'lack'}">${fmt(v)}</span>
+            </div>`;
+          }).join('')}</div>`
+      }
+    </div>`;
+  }).join('');
+  c.querySelectorAll('[data-world]').forEach(el => {
+    el.addEventListener('click', () => {
+      const w = WORLDS[parseInt(el.dataset.world)];
+      if (state.unlockedWorlds.includes(w.id)) switchWorld(w.id);
+      else unlockWorld(w);
+      renderAll();
+    });
+  });
+}
+
+function renderStats() {
+  document.getElementById('stat-mined').textContent = fmt(state.totalMined);
+  document.getElementById('stat-clicks').textContent = fmt(state.totalClicks);
+  document.getElementById('stat-depth').textContent = fmt(state.maxDepth) + 'm';
+  document.getElementById('stat-worlds').textContent = state.unlockedWorlds.length + '/4';
+}
+
+function renderTabBar() {
+  // Mark Forge / Lab tabs as 'locked' (visual dim) until unlocked
+  const forgeBtn = document.querySelector('.tab-bar button[data-view="forge"]');
+  const labBtn = document.querySelector('.tab-bar button[data-view="research"]');
+  if (forgeBtn) forgeBtn.classList.toggle('locked', !state.forgeUnlocked);
+  if (labBtn) labBtn.classList.toggle('locked', !state.labUnlocked);
+}
+
+function renderAll() {
+  renderHeader();
+  renderShaft();
+  renderOreStrip();
+  renderInventory();
+  renderForge();
+  renderUpgrades();
+  renderResearch();
+  renderWorlds();
+  renderTabBar();
+}
+
+// ============================================================
+// VIEW SWITCHING & MODALS
+// ============================================================
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelector(`.tab-bar button[data-view="${name}"]`).classList.add('active');
+}
+
+document.querySelectorAll('.tab-bar button').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+
+function openModal(id) {
+  document.getElementById(id).classList.add('show');
+  if (id === 'modal-menu') renderStats();
+}
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show'));
+}
+
+// Generic confirmation modal — avoids native confirm() which looks ugly on mobile
+function showConfirm({ title = 'CONFIRM', body = '', confirmLabel = 'CONFIRM', onConfirm = () => {} }) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-body').innerHTML = body;
+  const okBtn = document.getElementById('btn-confirm-ok');
+  okBtn.textContent = confirmLabel;
+  // Replace handler to avoid stacking listeners
+  const newBtn = okBtn.cloneNode(true);
+  okBtn.parentNode.replaceChild(newBtn, okBtn);
+  newBtn.addEventListener('click', () => {
+    closeAllModals();
+    onConfirm();
+  });
+  openModal('modal-confirm');
+}
+document.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', closeAllModals);
+});
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', (e) => { if (e.target === m) closeAllModals(); });
+});
+
+document.getElementById('menu-btn').addEventListener('click', () => openModal('modal-menu'));
+document.getElementById('btn-save').addEventListener('click', () => saveState(false));
+document.getElementById('btn-reset').addEventListener('click', resetGame);
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  document.getElementById('export-text').value = exportSave();
+  closeAllModals();
+  openModal('modal-export');
+});
+
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('import-text').value = '';
+  closeAllModals();
+  openModal('modal-import');
+});
+
+document.getElementById('btn-do-import').addEventListener('click', () => {
+  const code = document.getElementById('import-text').value;
+  if (!code.trim()) { toast('✕ NO CODE PROVIDED'); return; }
+  if (!confirm('Overwrite current save with imported data?')) return;
+  if (importSave(code)) closeAllModals();
+});
+
+document.getElementById('btn-copy').addEventListener('click', async () => {
+  const txt = document.getElementById('export-text');
+  txt.select();
+  txt.setSelectionRange(0, 99999);
+  try {
+    await navigator.clipboard.writeText(txt.value);
+    toast('✓ COPIED TO CLIPBOARD');
+  } catch (e) {
+    try {
+      document.execCommand('copy');
+      toast('✓ COPIED');
+    } catch {
+      toast('✕ COPY FAILED — SELECT MANUALLY');
+    }
+  }
+});
+
+// ============================================================
+// CORE BINDINGS
+// ============================================================
+// Mine button: tap = 1 mine, hold = rapid-fire mining
+// Reusable hold-to-repeat handler. Fires action immediately on pointerdown, then accelerating repeats.
+// Uses setPointerCapture so the button keeps tracking even if the finger drifts off the button bounds.
+function attachHoldButton(btn, action, opts = {}) {
+  const initialDelay = opts.initialDelay || 350;
+  const startInterval = opts.startInterval || 200;
+  const minInterval = opts.minInterval || 70;
+  const accel = opts.accel || 0.88;
+
+  let holdTimer = null;
+  let activePointerId = null;
+  let interval = startInterval;
+
+  function clearTimer() {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  }
+
+  function startHold(pointerId) {
+    clearTimer();
+    activePointerId = pointerId;
+    interval = startInterval;
+    // Fire immediately on press
+    const ok = action();
+    if (ok === false) { activePointerId = null; return; }
+    // Schedule repeats
+    holdTimer = setTimeout(function repeatTick() {
+      if (activePointerId === null) return;
+      const ok = action();
+      if (ok === false) { stopHold(); return; }
+      interval = Math.max(minInterval, interval * accel);
+      holdTimer = setTimeout(repeatTick, interval);
+    }, initialDelay);
+  }
+
+  function stopHold() {
+    activePointerId = null;
+    clearTimer();
+  }
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (btn.disabled) return;
+    e.preventDefault();
+    // Capture so we keep getting events even if the finger leaves the button
+    try { btn.setPointerCapture(e.pointerId); } catch(_) {}
+    startHold(e.pointerId);
+  });
+  btn.addEventListener('pointerup',     () => stopHold());
+  btn.addEventListener('pointercancel', () => stopHold());
+  btn.addEventListener('lostpointercapture', () => stopHold());
+  // Safety: if the button becomes disabled mid-hold, stop
+  // (handled implicitly because action returns false when no ore)
+}
+
+// MINE button — immediate-fire on press, accelerating repeats while held
+attachHoldButton(document.getElementById('mine-btn'), () => {
+  mineOnce(false);
+  renderHeader();
+  renderOreStrip();
+  return true;
+}, { initialDelay: 350, startInterval: 200, minInterval: 70, accel: 0.88 });
+
+// DIG button — same pattern, returns false to stop when out of ore
+attachHoldButton(document.getElementById('dig-btn'), () => {
+  if (digDeeper(10)) {
+    renderShaft();
+    renderOreStrip();
+    renderInventory();
+    return true;
+  }
+  return false; // out of ore: stop the auto-repeat
+}, { initialDelay: 400, startInterval: 250, minInterval: 80, accel: 0.85 });
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    mineOnce(false);
+    renderHeader();
+    renderOreStrip();
+  } else if (e.code === 'KeyD') {
+    digDeeper(10);
+    renderShaft();
+    renderOreStrip();
+  }
+});
+
+// ============================================================
+// LOOPS
+// ============================================================
+let lastTick = Date.now();
+let saveCounter = 0;
+
+function tick() {
+  const now = Date.now();
+  const dt = (now - lastTick) / 1000;
+  lastTick = now;
+
+  const rate = buffs.autoRate * buffs.researchAutoMult;
+  if (rate > 0) {
+    state._autoAccum = (state._autoAccum || 0) + rate * dt;
+    while (state._autoAccum >= 1) {
+      mineOnce(true);
+      state._autoAccum -= 1;
+    }
+  }
+
+  // Auto-dig: silently attempt to dig if drone research is owned and ore is available
+  const dRate = buffs.autoDigRate || 0;
+  if (dRate > 0) {
+    state._autoDigAccum = (state._autoDigAccum || 0) + dRate * dt;
+    while (state._autoDigAccum >= 1) {
+      // digDeeper would toast on failure, so check affordability ourselves first
+      const layer = currentLayer();
+      const have = state.ores[layer.digOre] || 0;
+      if (have >= digOreCost()) {
+        digDeeper(10);
+      }
+      // Decrement regardless to avoid runaway accumulation when starved
+      state._autoDigAccum -= 1;
+    }
+  }
+
+  // Process smelt queue — auto-requeues if completed
+  const smeltChanged = processSmeltQueue();
+  if (smeltChanged) {
+    renderForge();
+    renderInventory();
+  }
+
+  saveCounter += dt;
+  if (saveCounter > 5) {
+    saveState(true);
+    saveCounter = 0;
+  }
+
+  renderHeader();
+  renderShaft();
+  if (Math.random() < 0.25) renderOreStrip();
+
+  // Live-refresh active view as needed
+  const activeView = document.querySelector('.view.active');
+  if (activeView) {
+    if (activeView.id === 'view-inv') {
+      // Don't rebuild the DOM mid-slider-drag — the input element would be replaced
+      if (!_stashInteracting) renderInventory();
+    } else if (activeView.id === 'view-forge') {
+      // Re-render frequently when locked (so depth/credit gates update live)
+      // or when a smelt is active (timer countdown). Otherwise leave UI stable.
+      if (!state.forgeUnlocked || (state.smeltQueue && state.smeltQueue.length > 0)) {
+        renderForge();
+      }
+    } else if (activeView.id === 'view-research') {
+      // Re-render frequently when locked (depth/credit gates need live update)
+      if (!state.labUnlocked) {
+        renderResearch();
+      }
+    }
+  }
+}
+
+setInterval(tick, 200);
+window.addEventListener('beforeunload', () => saveState(true));
+window.addEventListener('pagehide', () => saveState(true));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveState(true);
+});
+
+// ============================================================
+// OFFLINE PROGRESS
+// ============================================================
+const OFFLINE_CAP_SECONDS = 8 * 3600; // 8 hours max accumulation
+const OFFLINE_EFFICIENCY = 0.5; // offline auto-mining at 50% rate
+
+function processOfflineProgress() {
+  if (!state.lastSaved) return;
+  const elapsed = (Date.now() - state.lastSaved) / 1000;
+  if (elapsed < 60) return; // ignore short gaps (page reload, etc.)
+  const cappedElapsed = Math.min(elapsed, OFFLINE_CAP_SECONDS);
+
+  const minesPerSec = (buffs.autoRate * buffs.researchAutoMult) * OFFLINE_EFFICIENCY;
+  const digsPerSec = (buffs.autoDigRate || 0) * OFFLINE_EFFICIENCY;
+
+  if (minesPerSec <= 0 && digsPerSec <= 0) return;
+
+  let oresGained = {};
+  let creditsGained = 0;
+  let depthGained = 0;
+
+  // Auto-mining
+  if (minesPerSec > 0) {
+    const totalMines = Math.floor(minesPerSec * cappedElapsed);
+    // Sample mining: rather than running every single mine, batch by averaging
+    // Use current weighted ore picks at current depth
+    for (let i = 0; i < Math.min(totalMines, 5000); i++) {
+      const pick = pickOreToMine();
+      if (!pick) break;
+      const amount = Math.max(1, Math.floor(totalPower() * 0.6));
+      const realAmount = totalMines > 5000 ? amount * (totalMines / 5000) : amount;
+      oresGained[pick.id] = (oresGained[pick.id] || 0) + realAmount;
+    }
+  }
+
+  // Auto-dig (capped — can't actually advance depth past a layer offline since it's path-dependent)
+  // Instead, refund a portion of dig progress
+  if (digsPerSec > 0) {
+    const totalDigs = Math.floor(digsPerSec * cappedElapsed);
+    const cost = digOreCost();
+    const layer = currentLayer();
+    // Conservative: assume half the digs spend ore and contribute to progress
+    state.digProgress = (state.digProgress || 0) + totalDigs * 5 * (buffs.digSpeedMult || 1);
+  }
+
+  // Apply gains
+  for (const [k, v] of Object.entries(oresGained)) {
+    const intV = Math.floor(v);
+    state.ores[k] = (state.ores[k] || 0) + intV;
+    state.totalMined += intV;
+  }
+
+  // Resolve any smelt jobs that finished while away
+  let smeltedCount = 0;
+  if (state.smeltQueue && state.smeltQueue.length > 0) {
+    const now = Date.now();
+    state.smeltQueue = state.smeltQueue.filter(job => {
+      if (now >= job.endTime) {
+        const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
+        if (recipe) {
+          addQty(recipe.output, recipe.qty);
+          smeltedCount++;
+        }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // Display report
+  const mins = Math.floor(elapsed / 60);
+  const hrs = Math.floor(mins / 60);
+  const timeStr = hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
+  const cappedNote = elapsed > OFFLINE_CAP_SECONDS ? ` (capped at 8h)` : '';
+  setTimeout(() => {
+    toast(`◉ AWAY ${timeStr}${cappedNote}`);
+    const oreCount = Object.values(oresGained).reduce((a, b) => a + Math.floor(b), 0);
+    if (oreCount > 0) toast(`+ ${fmt(oreCount)} ORES MINED`);
+    if (smeltedCount > 0) toast(`+ ${smeltedCount} SMELT JOB${smeltedCount > 1 ? 'S' : ''} COMPLETED`);
+  }, 800);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+recalcBuffs();
+checkOreUnlocks();
+checkLayerChange();
+processOfflineProgress();
+renderAll();
+
+if (state.totalClicks === 0) {
+  setTimeout(() => toast('▼ TAP "MINE" TO BEGIN'), 500);
+  setTimeout(() => toast('▼ DIG DEEPER FOR RARE ORES'), 2500);
+  setTimeout(() => toast('◉ HOLD BUTTONS TO AUTO-REPEAT'), 4500);
+}
+
+// Diagnostic: tell the user whether the custom font actually loaded
+if (document.fonts && document.fonts.check) {
+  document.fonts.ready.then(() => {
+    const loaded = document.fonts.check('16px "Black Ops One"');
+    if (loaded) {
+      console.log('[CORE-BREAKER B16] Black Ops One font loaded OK');
+    } else {
+      console.warn('[CORE-BREAKER B16] Black Ops One font FAILED to load — using fallback');
+      setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
+    }
+  });
+}
+
+// ============================================================
+// PWA — register service worker for offline play
+// ============================================================
+if ('serviceWorker' in navigator) {
+  // Defer registration until after the game is interactive so it doesn't
+  // compete with first paint
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      console.log('[Core Breaker] Service worker registered, scope:', reg.scope);
+      // When a new service worker takes over, prompt to refresh once
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            // A new version is available; the next reload will use it.
+            // Show a non-intrusive toast so the player knows.
+            setTimeout(() => toast('◉ NEW VERSION AVAILABLE · RELOAD'), 1200);
+          }
+        });
+      });
+    }).catch(err => {
+      console.warn('[Core Breaker] Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+</body>
+</html>
