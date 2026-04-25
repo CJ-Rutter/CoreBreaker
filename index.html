@@ -1548,7 +1548,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span style="font-size: 8px; color: var(--text-faint); margin-left: 4px; letter-spacing: 1px;">B16</span>
+      <span style="font-size: 8px; color: var(--text-faint); margin-left: 4px; letter-spacing: 1px;">B17</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1727,6 +1727,19 @@
       </div>
       <div style="font-size:9px;color:var(--text-faint);text-align:center;letter-spacing:1px;">
         AUTO-SAVES EVERY 5 SECONDS
+      </div>
+      <div>
+        <div class="modal-section-title">Audio</div>
+        <button class="action-btn" id="btn-mute-toggle">
+          <span id="mute-label">SOUND: ON</span>
+          <span class="action-btn-arrow" id="mute-icon">♪</span>
+        </button>
+        <div style="height:8px"></div>
+        <div style="display:grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 4px 2px;">
+          <span style="font-size: 10px; color: var(--text-faint); letter-spacing: 1px;">VOL</span>
+          <input type="range" class="sell-slider" id="volume-slider" min="0" max="100" value="50" style="width: 100%;">
+          <span id="volume-value" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--amber-bright); min-width: 32px; text-align: right;">50%</span>
+        </div>
       </div>
       <div>
         <div class="modal-section-title">Danger Zone</div>
@@ -2216,6 +2229,223 @@ function resetGame() {
 }
 
 // ============================================================
+// AUDIO ENGINE
+// Synthesized sounds via Web Audio API. No audio files = small build, no
+// network dependency, plays offline. Lazy-init on first user gesture so
+// browsers don't block autoplay.
+// ============================================================
+const Sfx = (function() {
+  let ctx = null;
+  let masterGain = null;
+  let initialized = false;
+  let muted = false;
+  let volume = 0.5;
+
+  // Load saved settings synchronously so the first sound respects them
+  try {
+    const saved = localStorage.getItem('cb_audio_settings');
+    if (saved) {
+      const s = JSON.parse(saved);
+      if (typeof s.muted === 'boolean') muted = s.muted;
+      if (typeof s.volume === 'number') volume = Math.max(0, Math.min(1, s.volume));
+    }
+  } catch(_) {}
+
+  function saveSettings() {
+    try {
+      localStorage.setItem('cb_audio_settings', JSON.stringify({ muted, volume }));
+    } catch(_) {}
+  }
+
+  function ensureCtx() {
+    if (initialized) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      ctx = new Ctx();
+      masterGain = ctx.createGain();
+      masterGain.gain.value = muted ? 0 : volume;
+      masterGain.connect(ctx.destination);
+      initialized = true;
+    } catch(e) {
+      console.warn('[Audio] init failed:', e);
+    }
+  }
+
+  // Resume on user gesture (browsers suspend the AudioContext until interaction)
+  function resume() {
+    ensureCtx();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+  }
+
+  // ---- Sound primitives ----
+  // env: { attack, decay, sustain, release } in seconds; sustainLevel 0-1
+  function envelope(node, peak, attack, decay, sustainLevel, sustain, release, now) {
+    const g = node.gain;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(0, now);
+    g.linearRampToValueAtTime(peak, now + attack);
+    g.linearRampToValueAtTime(peak * sustainLevel, now + attack + decay);
+    g.setValueAtTime(peak * sustainLevel, now + attack + decay + sustain);
+    g.linearRampToValueAtTime(0, now + attack + decay + sustain + release);
+  }
+
+  function tone(freq, duration, type='sine', peak=0.5, attack=0.005, release=null) {
+    if (!initialized) ensureCtx();
+    if (!ctx || muted) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    const r = release == null ? duration * 0.3 : release;
+    envelope(gain, peak, attack, 0.01, 1, duration - attack - r, r, now);
+    osc.start(now);
+    osc.stop(now + duration + 0.05);
+  }
+
+  // Frequency sweep — useful for "thud" or "rise" effects
+  function sweep(fromFreq, toFreq, duration, type='sine', peak=0.4) {
+    if (!initialized) ensureCtx();
+    if (!ctx || muted) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(fromFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(0.1, toFreq), now + duration);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    envelope(gain, peak, 0.005, 0.01, 1, duration * 0.5, duration * 0.45, now);
+    osc.start(now);
+    osc.stop(now + duration + 0.05);
+  }
+
+  // Noise burst (band-limited via filter) — for "thunk", "kssh"
+  function noise(duration, filterFreq=1000, filterQ=1, peak=0.3, type='lowpass') {
+    if (!initialized) ensureCtx();
+    if (!ctx || muted) return;
+    const now = ctx.currentTime;
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = filterFreq;
+    filter.Q.value = filterQ;
+    const gain = ctx.createGain();
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    envelope(gain, peak, 0.005, 0.01, 1, duration * 0.2, duration * 0.7, now);
+    src.start(now);
+    src.stop(now + duration + 0.05);
+  }
+
+  // ---- Named sound effects ----
+  const sounds = {
+    // Mining: metallic noise burst with a brief tonal ping
+    mine: () => {
+      noise(0.08, 800, 2, 0.18, 'bandpass');
+      tone(420 + Math.random() * 40, 0.06, 'square', 0.06, 0.001, 0.05);
+    },
+    // Dig: lower-pitched, heavier "crunch"
+    dig: () => {
+      noise(0.12, 250, 1.5, 0.22, 'lowpass');
+      sweep(180, 90, 0.10, 'triangle', 0.10);
+    },
+    // Layer breakthrough: rising pitch + low boom
+    layer: () => {
+      sweep(220, 660, 0.35, 'sawtooth', 0.18);
+      tone(110, 0.3, 'sine', 0.22, 0.005, 0.25);
+      setTimeout(() => tone(880, 0.18, 'triangle', 0.16, 0.005, 0.15), 120);
+    },
+    // Ore unlocked: ascending tri-tone sparkle
+    oreUnlock: () => {
+      tone(660, 0.10, 'triangle', 0.14);
+      setTimeout(() => tone(880, 0.10, 'triangle', 0.14), 80);
+      setTimeout(() => tone(1320, 0.18, 'triangle', 0.16, 0.005, 0.15), 160);
+    },
+    // Smelt complete: warm two-note chime
+    smeltDone: () => {
+      tone(523, 0.14, 'sine', 0.12, 0.005, 0.12);
+      setTimeout(() => tone(784, 0.20, 'sine', 0.13, 0.005, 0.18), 80);
+    },
+    // Sell: short percussive "cha-ching"-ish
+    sell: () => {
+      tone(880, 0.06, 'square', 0.10, 0.001, 0.05);
+      setTimeout(() => tone(1320, 0.10, 'triangle', 0.12, 0.001, 0.08), 50);
+    },
+    // Upgrade purchase: confident "click-bloop"
+    upgrade: () => {
+      tone(440, 0.05, 'square', 0.10, 0.001, 0.04);
+      setTimeout(() => tone(660, 0.12, 'triangle', 0.14, 0.005, 0.10), 50);
+    },
+    // Research purchase: similar but with a higher chime
+    research: () => {
+      tone(523, 0.06, 'sine', 0.10, 0.001, 0.05);
+      setTimeout(() => tone(784, 0.10, 'sine', 0.12, 0.005, 0.09), 60);
+      setTimeout(() => tone(1047, 0.14, 'triangle', 0.13, 0.005, 0.12), 130);
+    },
+    // Error / can't afford: low buzz
+    error: () => {
+      sweep(180, 80, 0.18, 'sawtooth', 0.12);
+    },
+    // World unlock: triumphant fanfare
+    worldUnlock: () => {
+      const seq = [523, 659, 784, 1047]; // C-E-G-C
+      seq.forEach((f, i) => {
+        setTimeout(() => tone(f, 0.20, 'triangle', 0.18, 0.005, 0.16), i * 90);
+      });
+      setTimeout(() => {
+        tone(523, 0.4, 'sine', 0.16, 0.005, 0.35);
+        tone(784, 0.4, 'sine', 0.14, 0.005, 0.35);
+        tone(1047, 0.4, 'triangle', 0.15, 0.005, 0.35);
+      }, 360);
+    },
+    // UI tap: subtle click
+    tap: () => {
+      noise(0.02, 4000, 1, 0.08, 'bandpass');
+    },
+    // Confirm modal: short positive tone
+    confirm: () => {
+      tone(880, 0.08, 'sine', 0.10);
+      setTimeout(() => tone(1175, 0.12, 'triangle', 0.10, 0.005, 0.10), 60);
+    },
+  };
+
+  // ---- Public API ----
+  return {
+    play(name) {
+      if (muted) return;
+      ensureCtx();
+      const fn = sounds[name];
+      if (fn) {
+        try { fn(); } catch(e) { /* swallow audio errors silently */ }
+      }
+    },
+    resume,
+    isMuted() { return muted; },
+    getVolume() { return volume; },
+    setMuted(m) {
+      muted = !!m;
+      if (masterGain) masterGain.gain.value = muted ? 0 : volume;
+      saveSettings();
+    },
+    setVolume(v) {
+      volume = Math.max(0, Math.min(1, v));
+      if (masterGain && !muted) masterGain.gain.value = volume;
+      saveSettings();
+    },
+  };
+})();
+
+// ============================================================
 // HELPERS
 // ============================================================
 function fmt(n) {
@@ -2297,6 +2527,7 @@ function sellItem(itemId, amount) {
   subQty(itemId, qty);
   state.credits += price;
   state.totalSold = (state.totalSold || 0) + qty;
+  Sfx.play('sell');
   return { qty, price };
 }
 
@@ -2304,12 +2535,14 @@ function sellItem(itemId, amount) {
 function startSmelt(recipeId) {
   if (state.smeltQueue.length >= SMELT_SLOTS) {
     toast(`✕ FORGE FULL (${SMELT_SLOTS} SLOTS)`);
+    Sfx.play('error');
     return false;
   }
   const recipe = SMELT_RECIPES.find(r => r.id === recipeId);
   if (!recipe) return false;
   if (!canAfford(recipe.inputs)) {
     toast('✕ INSUFFICIENT MATERIALS');
+    Sfx.play('error');
     return false;
   }
   pay(recipe.inputs);
@@ -2319,6 +2552,7 @@ function startSmelt(recipeId) {
     startTime: now,
     endTime: now + recipe.time * 1000,
   });
+  Sfx.play('tap');
   return true;
 }
 
@@ -2387,6 +2621,10 @@ function processSmeltQueue() {
     }
     return true;
   });
+  // Play one chime per tick if anything finished, even if multiple jobs converged
+  if (completedRecipeIds.length > 0) {
+    Sfx.play('smeltDone');
+  }
   // Auto-requeue if toggled on
   for (const rid of completedRecipeIds) {
     if (state.autoSmelt && state.autoSmelt[rid]) {
@@ -2418,27 +2656,29 @@ function checkForgeUnlock() {
 function tryUnlockForge() {
   if (state.forgeUnlocked) return false;
   if (state.depth < FORGE_UNLOCK.depth) {
-    toast(`✕ NEEDS ${FORGE_UNLOCK.depth}m DEPTH`); return false;
+    toast(`✕ NEEDS ${FORGE_UNLOCK.depth}m DEPTH`); Sfx.play('error'); return false;
   }
   if (state.credits < FORGE_UNLOCK.credits) {
-    toast(`✕ NEEDS ◈${fmt(FORGE_UNLOCK.credits)}`); return false;
+    toast(`✕ NEEDS ◈${fmt(FORGE_UNLOCK.credits)}`); Sfx.play('error'); return false;
   }
   state.credits -= FORGE_UNLOCK.credits;
   state.forgeUnlocked = true;
   toast('◉ FORGE UNLOCKED');
+  Sfx.play('worldUnlock');
   return true;
 }
 function tryUnlockLab() {
   if (state.labUnlocked) return false;
   if (state.depth < LAB_UNLOCK.depth) {
-    toast(`✕ NEEDS ${LAB_UNLOCK.depth}m DEPTH`); return false;
+    toast(`✕ NEEDS ${LAB_UNLOCK.depth}m DEPTH`); Sfx.play('error'); return false;
   }
   if (state.credits < LAB_UNLOCK.credits) {
-    toast(`✕ NEEDS ◈${fmt(LAB_UNLOCK.credits)}`); return false;
+    toast(`✕ NEEDS ◈${fmt(LAB_UNLOCK.credits)}`); Sfx.play('error'); return false;
   }
   state.credits -= LAB_UNLOCK.credits;
   state.labUnlocked = true;
   toast('◉ LAB UNLOCKED');
+  Sfx.play('worldUnlock');
   return true;
 }
 
@@ -2505,6 +2745,7 @@ function mineOnce(isAuto = false) {
   if (!isAuto) {
     state.totalClicks++;
     spawnParticle(pick.o);
+    Sfx.play('mine');
     document.getElementById('rig-bit').classList.add('mining');
     clearTimeout(window._drillTo);
     window._drillTo = setTimeout(() => {
@@ -2535,11 +2776,13 @@ function digDeeper(amount = 1) {
   if (have < oreCost) {
     const oreName = ORES[oreId]?.name || oreId;
     toast(`✕ NEED ${oreCost} ${oreName.toUpperCase()}`);
+    Sfx.play('error');
     return false;
   }
   state.ores[oreId] = have - oreCost;
   const cost = digCost();
   state.digProgress += amount * buffs.digSpeedMult;
+  Sfx.play('dig');
   if (state.digProgress >= cost) {
     const overflow = state.digProgress - cost;
     state.depth += 1;
@@ -2556,7 +2799,10 @@ function checkOreUnlocks() {
   for (const [id, o] of getOres(state.currentWorld)) {
     if (state.depth >= o.minDepth && !lastUnlockedOres.has(id)) {
       lastUnlockedOres.add(id);
-      if (state.depth > 0) toast(`◆ NEW ORE: ${o.name.toUpperCase()}`);
+      if (state.depth > 0) {
+        toast(`◆ NEW ORE: ${o.name.toUpperCase()}`);
+        Sfx.play('oreUnlock');
+      }
     }
   }
 }
@@ -2569,6 +2815,7 @@ function checkLayerChange() {
     if (state.depth > 0) {
       const oreDef = ORES[l.digOre];
       toast(`▼ ${l.name} · DIG NEEDS ${oreDef?.name.toUpperCase() || l.digOre.toUpperCase()}`);
+      Sfx.play('layer');
     }
   }
 }
@@ -2577,11 +2824,12 @@ function buyUpgrade(u) {
   const lvl = state.upgrades[u.id] || 0;
   if (lvl >= u.maxLevel) return;
   const cost = upgradeCost(u);
-  if (state.credits < cost) { toast('✕ INSUFFICIENT CREDITS'); return; }
+  if (state.credits < cost) { toast('✕ INSUFFICIENT CREDITS'); Sfx.play('error'); return; }
   state.credits -= cost;
   state.upgrades[u.id] = lvl + 1;
   recalcBuffs();
   toast(`✓ ${u.name} → LV.${lvl+1}`);
+  Sfx.play('upgrade');
 }
 
 function buyResearch(r) {
@@ -2589,19 +2837,21 @@ function buyResearch(r) {
   if (lvl >= r.maxLevel) return;
   if (!researchAvailable(r)) return;
   const cost = r.cost(lvl);
-  if (!canAfford(cost)) { toast('✕ INSUFFICIENT MATERIALS'); return; }
+  if (!canAfford(cost)) { toast('✕ INSUFFICIENT MATERIALS'); Sfx.play('error'); return; }
   pay(cost);
   state.research[r.id] = lvl + 1;
   recalcBuffs();
   toast(`✓ ${r.name.toUpperCase()} LV.${lvl+1}`);
+  Sfx.play('research');
 }
 
 function unlockWorld(w) {
   if (state.unlockedWorlds.includes(w.id)) return;
-  if (!canAfford(w.cost)) { toast('✕ INSUFFICIENT RESOURCES'); return; }
+  if (!canAfford(w.cost)) { toast('✕ INSUFFICIENT RESOURCES'); Sfx.play('error'); return; }
   pay(w.cost);
   state.unlockedWorlds.push(w.id);
   toast(`◉ UNLOCKED: ${w.name.toUpperCase()}`);
+  Sfx.play('worldUnlock');
 }
 
 function switchWorld(wid) {
@@ -3440,9 +3690,47 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', (e) => { if (e.target === m) closeAllModals(); });
 });
 
-document.getElementById('menu-btn').addEventListener('click', () => openModal('modal-menu'));
+// Sync the audio settings UI controls to current Sfx state
+function syncAudioUI() {
+  const muted = Sfx.isMuted();
+  const vol = Sfx.getVolume();
+  const labelEl = document.getElementById('mute-label');
+  const iconEl = document.getElementById('mute-icon');
+  const slider = document.getElementById('volume-slider');
+  const valEl = document.getElementById('volume-value');
+  if (labelEl) labelEl.textContent = `SOUND: ${muted ? 'OFF' : 'ON'}`;
+  if (iconEl) iconEl.textContent = muted ? '✕' : '♪';
+  if (slider) slider.value = Math.round(vol * 100);
+  if (valEl) valEl.textContent = Math.round(vol * 100) + '%';
+}
+
+document.getElementById('menu-btn').addEventListener('click', () => {
+  openModal('modal-menu');
+  syncAudioUI();
+});
 document.getElementById('btn-save').addEventListener('click', () => saveState(false));
 document.getElementById('btn-reset').addEventListener('click', resetGame);
+
+// Mute toggle
+document.getElementById('btn-mute-toggle').addEventListener('click', () => {
+  Sfx.resume(); // make sure context is alive so user hears the confirmation tone
+  const newMuted = !Sfx.isMuted();
+  Sfx.setMuted(newMuted);
+  syncAudioUI();
+  if (!newMuted) Sfx.play('confirm'); // play a tone after unmuting so user hears it work
+});
+
+// Volume slider
+document.getElementById('volume-slider').addEventListener('input', (e) => {
+  const pct = parseInt(e.target.value) || 0;
+  Sfx.setVolume(pct / 100);
+  document.getElementById('volume-value').textContent = pct + '%';
+});
+// Play a sample tone when the user finishes dragging, so they hear the new level
+document.getElementById('volume-slider').addEventListener('change', () => {
+  Sfx.resume();
+  if (!Sfx.isMuted()) Sfx.play('tap');
+});
 
 document.getElementById('btn-export').addEventListener('click', () => {
   document.getElementById('export-text').value = exportSave();
@@ -3752,13 +4040,28 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B16] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B17] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B16] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B17] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
 }
+
+// ============================================================
+// AUDIO UNLOCK — resume the AudioContext on the first user gesture.
+// Mobile browsers block playback until the user actually interacts.
+// One-time listener that removes itself after firing.
+// ============================================================
+(function() {
+  const unlock = () => {
+    Sfx.resume();
+    document.removeEventListener('pointerdown', unlock, true);
+    document.removeEventListener('keydown', unlock, true);
+  };
+  document.addEventListener('pointerdown', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+})();
 
 // ============================================================
 // PWA — register service worker for offline play
