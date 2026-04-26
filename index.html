@@ -1579,7 +1579,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 19</span>
+      <span class="build-stamp" id="build-stamp">BUILD 20</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2158,6 +2158,9 @@ const DEFAULT_STATE = {
   forgeUnlocked: false,
   labUnlocked: false,
   totalSold: 0,       // tracking
+  // Notification de-dupe — persists so we don't re-fire toasts for already-discovered things
+  seenOres: [],       // ore ids the player has already had unlocked at some point
+  seenLayer: '',      // last layer name the player saw the "DIG NEEDS x" toast for
   lastSaved: Date.now(),
 };
 
@@ -2193,6 +2196,28 @@ function migrateState(s) {
   for (const k of Object.keys(DEFAULT_STATE)) {
     if (!(k in s)) s[k] = structuredClone(DEFAULT_STATE[k]);
   }
+
+  // Backfill seenOres: any ore whose minDepth the player has already passed
+  // is treated as already-discovered, so we don't toast on first load after upgrade.
+  // Only runs once because after this, seenOres will always be non-empty for any
+  // post-discovery save.
+  if (Array.isArray(s.seenOres) && s.seenOres.length === 0 && s.maxDepth > 0) {
+    for (const [id, o] of Object.entries(ORES)) {
+      if (s.maxDepth >= o.minDepth) s.seenOres.push(id);
+    }
+  }
+
+  // Backfill seenLayer to the current layer name so the layer toast doesn't
+  // re-fire on first load after upgrade.
+  if (!s.seenLayer && s.depth > 0) {
+    const layers = LAYERS[s.currentWorld] || LAYERS[0];
+    let current = layers[0];
+    for (const layer of layers) {
+      if (s.depth >= layer.depth) current = layer;
+    }
+    s.seenLayer = current.name;
+  }
+
   s.v = SAVE_VERSION;
   return s;
 }
@@ -2233,8 +2258,6 @@ function importSave(code) {
     state = migrateState(parsed);
     saveState(true);
     recalcBuffs();
-    lastUnlockedOres = new Set();
-    lastLayerName = '';
     checkOreUnlocks();
     checkLayerChange();
     renderAll();
@@ -2252,8 +2275,6 @@ function resetGame() {
   state = structuredClone(DEFAULT_STATE);
   saveState(true);
   recalcBuffs();
-  lastUnlockedOres = new Set();
-  lastLayerName = '';
   closeAllModals();
   renderAll();
   toast('▶ RESET COMPLETE');
@@ -2825,11 +2846,10 @@ function digDeeper(amount = 1) {
   return true;
 }
 
-let lastUnlockedOres = new Set();
 function checkOreUnlocks() {
   for (const [id, o] of getOres(state.currentWorld)) {
-    if (state.depth >= o.minDepth && !lastUnlockedOres.has(id)) {
-      lastUnlockedOres.add(id);
+    if (state.depth >= o.minDepth && !state.seenOres.includes(id)) {
+      state.seenOres.push(id);
       if (state.depth > 0) {
         toast(`◆ NEW ORE: ${o.name.toUpperCase()}`);
         Sfx.play('oreUnlock');
@@ -2838,11 +2858,10 @@ function checkOreUnlocks() {
   }
 }
 
-let lastLayerName = '';
 function checkLayerChange() {
   const l = currentLayer();
-  if (l.name !== lastLayerName) {
-    lastLayerName = l.name;
+  if (l.name !== state.seenLayer) {
+    state.seenLayer = l.name;
     if (state.depth > 0) {
       const oreDef = ORES[l.digOre];
       toast(`▼ ${l.name} · DIG NEEDS ${oreDef?.name.toUpperCase() || l.digOre.toUpperCase()}`);
@@ -2891,8 +2910,8 @@ function switchWorld(wid) {
   state.currentWorld = wid;
   state.depth = 0;
   state.digProgress = 0;
-  lastUnlockedOres = new Set();
-  lastLayerName = '';
+  // seenOres / seenLayer carry across worlds — different worlds have different
+  // ore IDs and layer names, so first-time discovery still toasts correctly.
   checkOreUnlocks();
   checkLayerChange();
   toast(`▶ ${WORLDS[wid].name.toUpperCase()}`);
@@ -4089,9 +4108,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B19] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B20] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B19] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B20] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
