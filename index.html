@@ -1610,7 +1610,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 23</span>
+      <span class="build-stamp" id="build-stamp">BUILD 25</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2264,6 +2264,18 @@ function migrateState(s) {
     s.seenLayer = current.name;
   }
 
+  // Migrate autoSmelt: was boolean (on/off) up through B24, now a number
+  // (0 = off, 1..SMELT_SLOTS = max parallel slots for that recipe).
+  // Convert any boolean values to 1 (preserving the player's "on" intent).
+  if (s.autoSmelt && typeof s.autoSmelt === 'object') {
+    for (const k of Object.keys(s.autoSmelt)) {
+      const v = s.autoSmelt[k];
+      if (v === true) s.autoSmelt[k] = 1;
+      else if (v === false) s.autoSmelt[k] = 0;
+      else if (typeof v !== 'number') s.autoSmelt[k] = 0;
+    }
+  }
+
   s.v = SAVE_VERSION;
   return s;
 }
@@ -2702,18 +2714,34 @@ function cancelSmelt(slotIdx) {
 
 // Process completed smelts (called each tick).
 // If auto-smelt is enabled for a completed recipe and materials are available, requeue it.
-// Fill any empty smelt slots with auto-smelt-enabled recipes the player can afford.
-// Returns true if at least one slot was filled. Called from processSmeltQueue and
-// from offline progress so auto-smelt resumes naturally on cold open.
+// Fill smelt slots with auto-smelt recipes, respecting each recipe's
+// per-recipe slot limit (state.autoSmelt[recipe.id] = max parallel jobs).
+//
+// Round-robin distribution: each enabled recipe gets one slot per pass before
+// the next recipe gets a turn, so multiple auto-smelts share fairly. A recipe
+// won't queue beyond its configured limit even if free slots remain.
 function fillAutoSmeltSlots() {
   if (!state.autoSmelt) return false;
+  // Collect recipes with non-zero limits
+  const enabled = SMELT_RECIPES.filter(r => (state.autoSmelt[r.id] || 0) > 0);
+  if (enabled.length === 0) return false;
+  // Count how many of each recipe are currently in the queue
+  const liveCount = {};
+  for (const job of state.smeltQueue) {
+    liveCount[job.recipeId] = (liveCount[job.recipeId] || 0) + 1;
+  }
   let filled = false;
-  // Stable ordering: iterate auto-smelt enabled recipes in their definition order.
-  // This way if multiple are competing for the same materials, the earlier-defined
-  // recipe wins consistently rather than randomly.
-  for (const recipe of SMELT_RECIPES) {
-    if (!state.autoSmelt[recipe.id]) continue;
-    while (state.smeltQueue.length < SMELT_SLOTS && canAfford(recipe.inputs)) {
+  // Round-robin pass: each recipe gets at most one slot per pass.
+  // Loop continues until either no recipe in this pass made progress, or all
+  // configured limits are hit.
+  while (state.smeltQueue.length < SMELT_SLOTS) {
+    let progressedThisPass = false;
+    for (const recipe of enabled) {
+      if (state.smeltQueue.length >= SMELT_SLOTS) break;
+      const limit = state.autoSmelt[recipe.id] || 0;
+      const current = liveCount[recipe.id] || 0;
+      if (current >= limit) continue;        // already at user-set max
+      if (!canAfford(recipe.inputs)) continue;
       pay(recipe.inputs);
       const now = Date.now();
       state.smeltQueue.push({
@@ -2721,9 +2749,11 @@ function fillAutoSmeltSlots() {
         startTime: now,
         endTime: now + recipe.time * 1000,
       });
+      liveCount[recipe.id] = current + 1;
       filled = true;
+      progressedThisPass = true;
     }
-    if (state.smeltQueue.length >= SMELT_SLOTS) break;
+    if (!progressedThisPass) break;
   }
   return filled;
 }
@@ -3557,7 +3587,8 @@ function renderForge() {
       const queueFull = queue.length >= SMELT_SLOTS;
       const disabled = !afford || queueFull;
       const timeStr = r.time >= 60 ? `${Math.floor(r.time/60)}m${(r.time%60).toString().padStart(2,'0')}s` : `${r.time}s`;
-      const autoOn = !!(state.autoSmelt && state.autoSmelt[r.id]);
+      const autoLimit = (state.autoSmelt && state.autoSmelt[r.id]) || 0;
+      const autoOn = autoLimit > 0;
       recipesHtml += `<div class="recipe-card ${disabled ? 'disabled' : ''}" data-recipe="${r.id}">
         <div class="recipe-head">
           <div class="recipe-output-icon" style="--ore-color:${def?.color || '#fff'}">${def?.sym || '?'}</div>
@@ -3579,9 +3610,9 @@ function renderForge() {
           }).join('')}
         </div>
         <div class="recipe-footer">
-          <button class="auto-toggle ${autoOn ? 'on' : ''}" data-auto="${r.id}">
+          <button class="auto-toggle ${autoOn ? 'on' : ''}" data-auto="${r.id}" title="Tap to cycle slots, long-press to turn off">
             <span class="auto-dot"></span>
-            <span class="auto-label">AUTO-SMELT ${autoOn ? 'ON' : 'OFF'}</span>
+            <span class="auto-label">AUTO ${autoOn ? autoLimit + ' SLOT' + (autoLimit > 1 ? 'S' : '') : 'OFF'}</span>
           </button>
           <span class="recipe-tap-hint">${disabled ? (queueFull ? 'SLOTS FULL' : 'NEED MATERIALS') : 'TAP TO SMELT →'}</span>
         </div>
@@ -3612,15 +3643,61 @@ function renderForge() {
     });
   });
 
-  // Wire auto-smelt toggles (must stopPropagation so tap doesn't fall through to card)
+  // Wire auto-smelt cycle button.
+  // Tap: cycles 0 → 1 → 2 → ... → SMELT_SLOTS → 0 (off)
+  // Long-press (450ms+): resets to 0 (off) — quick way to disable without cycling
   c.querySelectorAll('[data-auto]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
+    let pressTimer = null;
+    let longPressed = false;
+
+    const cycleSlots = () => {
       const rid = btn.dataset.auto;
       if (!state.autoSmelt) state.autoSmelt = {};
-      state.autoSmelt[rid] = !state.autoSmelt[rid];
-      toast(`◉ AUTO-SMELT ${state.autoSmelt[rid] ? 'ON' : 'OFF'}`);
+      const current = state.autoSmelt[rid] || 0;
+      const next = (current + 1) > SMELT_SLOTS ? 0 : current + 1;
+      state.autoSmelt[rid] = next;
+      toast(next > 0
+        ? `◉ AUTO ${next} SLOT${next > 1 ? 'S' : ''}`
+        : '◉ AUTO OFF');
       renderForge();
+    };
+
+    const resetSlots = () => {
+      const rid = btn.dataset.auto;
+      if (!state.autoSmelt) state.autoSmelt = {};
+      if ((state.autoSmelt[rid] || 0) === 0) return; // already off
+      state.autoSmelt[rid] = 0;
+      toast('◉ AUTO OFF');
+      Sfx.play('tap');
+      renderForge();
+    };
+
+    btn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      longPressed = false;
+      pressTimer = setTimeout(() => {
+        longPressed = true;
+        resetSlots();
+      }, 450);
+    });
+    const cancelTimer = () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    };
+    btn.addEventListener('pointerup', (e) => {
+      e.stopPropagation();
+      cancelTimer();
+    });
+    btn.addEventListener('pointercancel', cancelTimer);
+    btn.addEventListener('pointerleave', cancelTimer);
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // If long-press already fired the reset, don't also cycle on click
+      if (longPressed) {
+        longPressed = false;
+        return;
+      }
+      cycleSlots();
     });
   });
 
@@ -4136,18 +4213,34 @@ function processOfflineProgress() {
     remaining: Math.max(0, (job.endTime - state.lastSaved) / 1000),
   }));
 
-  // Helper: try to start a new auto-smelt job in the simulation
-  // Only T1 recipes are eligible offline. Returns true if a job was started.
+  // Helper: try to start a new auto-smelt job in the simulation.
+  // Only T1 recipes are eligible offline. Respects each recipe's slot limit
+  // (state.autoSmelt[recipe.id] = max parallel). Round-robin pointer ensures
+  // fair slot distribution across multiple enabled recipes.
+  const eligibleRecipes = SMELT_RECIPES.filter(r =>
+    state.autoSmelt && (state.autoSmelt[r.id] || 0) > 0 && r.tier === 1
+  );
+  let rrPointer = 0;
+
+  // Live count of each recipe currently in the simulated queue
+  const simLiveCount = {};
+  for (const j of activeJobs) simLiveCount[j.recipeId] = (simLiveCount[j.recipeId] || 0) + 1;
+
   const trySimAutoSmelt = () => {
     if (activeJobs.length >= SMELT_SLOTS) return false;
-    if (!state.autoSmelt) return false;
-    for (const recipe of SMELT_RECIPES) {
-      if (!state.autoSmelt[recipe.id]) continue;
-      if (recipe.tier !== 1) continue; // T1 only offline
-      if (!canAfford(recipe.inputs)) continue;
-      pay(recipe.inputs);
-      activeJobs.push({ recipeId: recipe.id, remaining: recipe.time });
-      return true;
+    if (eligibleRecipes.length === 0) return false;
+    for (let attempts = 0; attempts < eligibleRecipes.length; attempts++) {
+      const recipe = eligibleRecipes[rrPointer % eligibleRecipes.length];
+      rrPointer++;
+      const limit = state.autoSmelt[recipe.id] || 0;
+      const current = simLiveCount[recipe.id] || 0;
+      if (current >= limit) continue;
+      if (canAfford(recipe.inputs)) {
+        pay(recipe.inputs);
+        activeJobs.push({ recipeId: recipe.id, remaining: recipe.time });
+        simLiveCount[recipe.id] = current + 1;
+        return true;
+      }
     }
     return false;
   };
@@ -4183,6 +4276,8 @@ function processOfflineProgress() {
       offlineIngotsGained[recipe.output] = (offlineIngotsGained[recipe.output] || 0) + recipe.qty;
     }
     activeJobs.splice(nextIdx, 1);
+    // Decrement live count for this recipe so trySimAutoSmelt can refill its slot
+    if (simLiveCount[next.recipeId]) simLiveCount[next.recipeId]--;
     // Try to refill the freed slot with an auto-smelt (T1 only)
     while (trySimAutoSmelt()) { /* fill any newly-affordable slots */ }
   }
@@ -4287,9 +4382,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B23] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B25] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B23] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B25] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
