@@ -1503,6 +1503,37 @@
     text-transform: uppercase;
     margin-bottom: 8px;
   }
+  /* Welcome-back modal report rows */
+  .welcome-row {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .welcome-row .icon {
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    text-align: center;
+  }
+  .welcome-row .label {
+    color: var(--text);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .welcome-row .value {
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 13px;
+    white-space: nowrap;
+  }
   .action-btn {
     background: var(--bg-deep);
     border: 1px solid var(--line-hi);
@@ -1579,7 +1610,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 21</span>
+      <span class="build-stamp" id="build-stamp">BUILD 23</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1831,6 +1862,21 @@
       <div class="modal-row">
         <button class="action-btn" data-close style="text-align:center;justify-content:center;">CANCEL</button>
         <button class="action-btn" id="btn-confirm-ok" style="text-align:center;justify-content:center;">CONFIRM</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-welcome">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">WELCOME BACK</div>
+    </div>
+    <div class="modal-body">
+      <div id="welcome-time" style="font-size:11px;color:var(--text-faint);letter-spacing:1.5px;text-align:center;text-transform:uppercase;padding:0 0 8px;"></div>
+      <div id="welcome-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div class="modal-row" style="margin-top:10px;">
+        <button class="action-btn" id="btn-welcome-ok" style="text-align:center;justify-content:center;">OK</button>
       </div>
     </div>
   </div>
@@ -3766,6 +3812,7 @@ document.querySelectorAll('[data-close]').forEach(el => {
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', (e) => { if (e.target === m) closeAllModals(); });
 });
+document.getElementById('btn-welcome-ok').addEventListener('click', closeAllModals);
 
 // Sync the audio settings UI controls to current Sfx state
 function syncAudioUI() {
@@ -4070,39 +4117,154 @@ function processOfflineProgress() {
     state.totalMined += intV;
   }
 
-  // Resolve any smelt jobs that finished while away
+  // ─── Offline smelting simulation ───
+  // Event-driven loop: jump to the next smelt completion, process it, then
+  // try to seed a new auto-smelt job if one fits. Stops when:
+  //   - time budget runs out (cappedElapsed)
+  //   - no active jobs AND no auto-smelt can afford materials (deadlock-free exit)
+  // Only T1 ingot recipes auto-smelt offline. T2/T3 recipes that were already
+  // running when the player closed still complete normally; they just don't
+  // auto-requeue offline.
   let smeltedCount = 0;
-  if (state.smeltQueue && state.smeltQueue.length > 0) {
-    const now = Date.now();
-    state.smeltQueue = state.smeltQueue.filter(job => {
-      if (now >= job.endTime) {
-        const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
-        if (recipe) {
-          addQty(recipe.output, recipe.qty);
-          smeltedCount++;
-        }
-        return false;
-      }
+  const offlineIngotsGained = {}; // for the report
+  // Working clock relative to the moment the player closed the app
+  let simT = 0; // seconds since `state.lastSaved`
+  const budget = cappedElapsed;
+  // Reset job timing into the simulation frame: each job has a "remaining" duration
+  let activeJobs = (state.smeltQueue || []).map(job => ({
+    recipeId: job.recipeId,
+    remaining: Math.max(0, (job.endTime - state.lastSaved) / 1000),
+  }));
+
+  // Helper: try to start a new auto-smelt job in the simulation
+  // Only T1 recipes are eligible offline. Returns true if a job was started.
+  const trySimAutoSmelt = () => {
+    if (activeJobs.length >= SMELT_SLOTS) return false;
+    if (!state.autoSmelt) return false;
+    for (const recipe of SMELT_RECIPES) {
+      if (!state.autoSmelt[recipe.id]) continue;
+      if (recipe.tier !== 1) continue; // T1 only offline
+      if (!canAfford(recipe.inputs)) continue;
+      pay(recipe.inputs);
+      activeJobs.push({ recipeId: recipe.id, remaining: recipe.time });
       return true;
-    });
+    }
+    return false;
+  };
+
+  // Seed empty slots immediately at simT=0 (before stepping through events)
+  while (trySimAutoSmelt()) { /* fill */ }
+
+  // Event loop with a safety cap (prevents runaway in pathological cases)
+  let safety = 50000;
+  while (safety-- > 0) {
+    if (activeJobs.length === 0) break;
+    // Find the next job to finish
+    let nextIdx = 0;
+    for (let i = 1; i < activeJobs.length; i++) {
+      if (activeJobs[i].remaining < activeJobs[nextIdx].remaining) nextIdx = i;
+    }
+    const next = activeJobs[nextIdx];
+    const advance = next.remaining;
+    if (simT + advance > budget) {
+      // Budget exhausted — advance partial time on remaining jobs and stop
+      const partial = budget - simT;
+      for (const j of activeJobs) j.remaining -= partial;
+      simT = budget;
+      break;
+    }
+    // Advance all jobs by `advance`, complete the soonest one
+    simT += advance;
+    for (const j of activeJobs) j.remaining -= advance;
+    const recipe = SMELT_RECIPES.find(r => r.id === next.recipeId);
+    if (recipe) {
+      addQty(recipe.output, recipe.qty);
+      smeltedCount++;
+      offlineIngotsGained[recipe.output] = (offlineIngotsGained[recipe.output] || 0) + recipe.qty;
+    }
+    activeJobs.splice(nextIdx, 1);
+    // Try to refill the freed slot with an auto-smelt (T1 only)
+    while (trySimAutoSmelt()) { /* fill any newly-affordable slots */ }
   }
 
-  // After offline catch-up, fill any empty slots with auto-smelt recipes
-  // using whatever materials are now available. This way the queue isn't
-  // empty when the regular tick takes over.
+  // Persist remaining active jobs back into state.smeltQueue with absolute timing
+  // Their "end time" is relative to now (player just opened the app).
+  const now = Date.now();
+  state.smeltQueue = activeJobs.map(j => ({
+    recipeId: j.recipeId,
+    startTime: now - ((SMELT_RECIPES.find(r => r.id === j.recipeId)?.time || 0) - j.remaining) * 1000,
+    endTime: now + j.remaining * 1000,
+  }));
+
+  // After simulation, top up auto-smelt slots in case any opened up at the very end
   fillAutoSmeltSlots();
 
-  // Display report
+  // Build the welcome-back report
   const mins = Math.floor(elapsed / 60);
   const hrs = Math.floor(mins / 60);
   const timeStr = hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
-  const cappedNote = elapsed > OFFLINE_CAP_SECONDS ? ` (capped at 8h)` : '';
-  setTimeout(() => {
-    toast(`◉ AWAY ${timeStr}${cappedNote}`);
-    const oreCount = Object.values(oresGained).reduce((a, b) => a + Math.floor(b), 0);
-    if (oreCount > 0) toast(`+ ${fmt(oreCount)} ORES MINED`);
-    if (smeltedCount > 0) toast(`+ ${smeltedCount} SMELT JOB${smeltedCount > 1 ? 'S' : ''} COMPLETED`);
-  }, 800);
+  const cappedNote = elapsed > OFFLINE_CAP_SECONDS ? ' (capped at 8h)' : '';
+
+  const rows = [];
+  // Total ore mined + top 3 by quantity
+  const oreEntries = Object.entries(oresGained)
+    .map(([k, v]) => [k, Math.floor(v)])
+    .filter(([_, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const oreTotal = oreEntries.reduce((acc, [, v]) => acc + v, 0);
+  if (oreTotal > 0) {
+    rows.push({ icon: '⛏', label: 'Ore Mined', value: '+' + fmt(oreTotal) });
+    // Show up to 3 top ores as breakdown rows
+    for (const [id, v] of oreEntries.slice(0, 3)) {
+      const o = ORES[id];
+      if (!o) continue;
+      rows.push({
+        icon: o.sym,
+        iconColor: o.color,
+        label: o.name,
+        value: '+' + fmt(v),
+        sub: true,
+      });
+    }
+  }
+  // Smelt yield: top ingots produced
+  const ingotEntries = Object.entries(offlineIngotsGained)
+    .sort((a, b) => b[1] - a[1]);
+  if (ingotEntries.length > 0) {
+    const totalIngots = ingotEntries.reduce((a, [, v]) => a + v, 0);
+    rows.push({ icon: '◆', label: 'Forged Ingots', value: '+' + fmt(totalIngots) });
+    for (const [id, v] of ingotEntries.slice(0, 3)) {
+      const def = getItemDef(id);
+      rows.push({
+        icon: def?.sym || '?',
+        iconColor: def?.color,
+        label: def?.name || id,
+        value: '+' + fmt(v),
+        sub: true,
+      });
+    }
+  }
+
+  // Only show the modal if there's something to report
+  if (rows.length > 0) {
+    setTimeout(() => showWelcomeBack(timeStr + cappedNote, rows), 600);
+  }
+}
+
+// Render and open the welcome-back modal with offline report rows
+function showWelcomeBack(timeStr, rows) {
+  document.getElementById('welcome-time').textContent = `AWAY ${timeStr}`;
+  const list = document.getElementById('welcome-list');
+  list.innerHTML = rows.map(r => {
+    const indent = r.sub ? 'margin-left: 16px; border-left-color: var(--line);' : '';
+    const colorStyle = r.iconColor ? `color:${r.iconColor};text-shadow:0 0 6px ${r.iconColor};` : '';
+    return `<div class="welcome-row" style="${indent}">
+      <span class="icon" style="${colorStyle}">${r.icon}</span>
+      <span class="label">${r.label}</span>
+      <span class="value">${r.value}</span>
+    </div>`;
+  }).join('');
+  openModal('modal-welcome');
 }
 
 // ============================================================
@@ -4125,9 +4287,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B21] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B23] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B21] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B23] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
