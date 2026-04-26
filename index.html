@@ -1610,7 +1610,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 25</span>
+      <span class="build-stamp" id="build-stamp">BUILD 27</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1801,6 +1801,15 @@
           <span style="font-size: 10px; color: var(--text-faint); letter-spacing: 1px;">VOL</span>
           <input type="range" class="sell-slider" id="volume-slider" min="0" max="100" value="50" style="width: 100%;">
           <span id="volume-value" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; color: var(--amber-bright); min-width: 32px; text-align: right;">50%</span>
+        </div>
+      </div>
+      <div>
+        <div class="modal-section-title">App</div>
+        <button class="action-btn" id="btn-force-reload">
+          FORCE RELOAD <span class="action-btn-arrow">↻</span>
+        </button>
+        <div style="font-size:9px;color:var(--text-faint);text-align:center;letter-spacing:1px;padding:4px 2px 0;">
+          CLEARS CACHE · USE IF STUCK ON OLD VERSION
         </div>
       </div>
       <div>
@@ -2662,6 +2671,14 @@ function startSmelt(recipeId) {
     startTime: now,
     endTime: now + recipe.time * 1000,
   });
+  // If auto-smelt is on for this recipe, ratchet the maintain target up so the
+  // newly-queued slot becomes part of the auto-maintained pool.
+  if (state.autoSmelt && state.autoSmelt[recipeId] > 0) {
+    const liveCount = state.smeltQueue.filter(j => j.recipeId === recipeId).length;
+    if (liveCount > state.autoSmelt[recipeId]) {
+      state.autoSmelt[recipeId] = liveCount;
+    }
+  }
   Sfx.play('tap');
   return true;
 }
@@ -2686,6 +2703,12 @@ function cancelSmelt(slotIdx) {
       }
     }
     state.smeltQueue.splice(slotIdx, 1);
+    // Ratchet the auto-smelt target DOWN so the cancelled slot doesn't immediately
+    // refill from auto-smelt. If the target hits 0, auto-smelt effectively turns off
+    // for this recipe.
+    if (state.autoSmelt && state.autoSmelt[recipe.id] > 0) {
+      state.autoSmelt[recipe.id] = Math.max(0, state.autoSmelt[recipe.id] - 1);
+    }
     toast(refunded
       ? `✕ CANCELLED · 50% MATERIALS REFUNDED`
       : `✕ CANCELLED`);
@@ -3610,9 +3633,9 @@ function renderForge() {
           }).join('')}
         </div>
         <div class="recipe-footer">
-          <button class="auto-toggle ${autoOn ? 'on' : ''}" data-auto="${r.id}" title="Tap to cycle slots, long-press to turn off">
+          <button class="auto-toggle ${autoOn ? 'on' : ''}" data-auto="${r.id}">
             <span class="auto-dot"></span>
-            <span class="auto-label">AUTO ${autoOn ? autoLimit + ' SLOT' + (autoLimit > 1 ? 'S' : '') : 'OFF'}</span>
+            <span class="auto-label">AUTO-SMELT ${autoOn ? `ON · ${autoLimit}` : 'OFF'}</span>
           </button>
           <span class="recipe-tap-hint">${disabled ? (queueFull ? 'SLOTS FULL' : 'NEED MATERIALS') : 'TAP TO SMELT →'}</span>
         </div>
@@ -3643,61 +3666,27 @@ function renderForge() {
     });
   });
 
-  // Wire auto-smelt cycle button.
-  // Tap: cycles 0 → 1 → 2 → ... → SMELT_SLOTS → 0 (off)
-  // Long-press (450ms+): resets to 0 (off) — quick way to disable without cycling
+  // Wire auto-smelt toggle button.
+  // ON: target = max(1, current live count of this recipe in slots) — maintains
+  // however many you currently have queued. Manual queues raise the target,
+  // cancellations lower it. OFF: target = 0 (no auto activity).
   c.querySelectorAll('[data-auto]').forEach(btn => {
-    let pressTimer = null;
-    let longPressed = false;
-
-    const cycleSlots = () => {
-      const rid = btn.dataset.auto;
-      if (!state.autoSmelt) state.autoSmelt = {};
-      const current = state.autoSmelt[rid] || 0;
-      const next = (current + 1) > SMELT_SLOTS ? 0 : current + 1;
-      state.autoSmelt[rid] = next;
-      toast(next > 0
-        ? `◉ AUTO ${next} SLOT${next > 1 ? 'S' : ''}`
-        : '◉ AUTO OFF');
-      renderForge();
-    };
-
-    const resetSlots = () => {
-      const rid = btn.dataset.auto;
-      if (!state.autoSmelt) state.autoSmelt = {};
-      if ((state.autoSmelt[rid] || 0) === 0) return; // already off
-      state.autoSmelt[rid] = 0;
-      toast('◉ AUTO OFF');
-      Sfx.play('tap');
-      renderForge();
-    };
-
-    btn.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      longPressed = false;
-      pressTimer = setTimeout(() => {
-        longPressed = true;
-        resetSlots();
-      }, 450);
-    });
-    const cancelTimer = () => {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    };
-    btn.addEventListener('pointerup', (e) => {
-      e.stopPropagation();
-      cancelTimer();
-    });
-    btn.addEventListener('pointercancel', cancelTimer);
-    btn.addEventListener('pointerleave', cancelTimer);
-
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      // If long-press already fired the reset, don't also cycle on click
-      if (longPressed) {
-        longPressed = false;
-        return;
+      const rid = btn.dataset.auto;
+      if (!state.autoSmelt) state.autoSmelt = {};
+      const wasOn = (state.autoSmelt[rid] || 0) > 0;
+      if (wasOn) {
+        state.autoSmelt[rid] = 0;
+        toast('◉ AUTO-SMELT OFF');
+      } else {
+        // Snapshot current live count of this recipe (default to 1 if none queued)
+        const liveCount = state.smeltQueue.filter(j => j.recipeId === rid).length;
+        state.autoSmelt[rid] = Math.max(1, liveCount);
+        toast(`◉ AUTO-SMELT ON · ${state.autoSmelt[rid]} SLOT${state.autoSmelt[rid] > 1 ? 'S' : ''}`);
       }
-      cycleSlots();
+      Sfx.play('tap');
+      renderForge();
     });
   });
 
@@ -3911,6 +3900,38 @@ document.getElementById('menu-btn').addEventListener('click', () => {
 });
 document.getElementById('btn-save').addEventListener('click', () => saveState(false));
 document.getElementById('btn-reset').addEventListener('click', resetGame);
+
+// Force Reload — clears all caches, unregisters service worker, hard reloads.
+// Use this when stuck on an old build. Saves state first so progress isn't lost.
+document.getElementById('btn-force-reload').addEventListener('click', async () => {
+  toast('↻ CLEARING CACHE...');
+  try {
+    // 1. Save current state so the upgrade doesn't lose progress
+    saveState(true);
+    // 2. Tell SW to clear its caches (it has a CLEAR_CACHE handler now)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_CACHE' });
+    }
+    // 3. Wipe all browser caches by name (defense in depth — works even if SW handler fails)
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    // 4. Unregister all service workers — next load gets a fresh SW
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch (e) {
+    console.warn('[Core Breaker] Force reload cleanup failed:', e);
+  }
+  // 5. Hard reload bypassing browser cache. Note: location.reload(true) is
+  //    deprecated but still works on most browsers; the cache-bypass query
+  //    string ensures even stubborn proxies fetch fresh.
+  setTimeout(() => {
+    location.replace(location.pathname + '?nocache=' + Date.now());
+  }, 400);
+});
 
 // Mute toggle
 document.getElementById('btn-mute-toggle').addEventListener('click', () => {
@@ -4382,9 +4403,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B25] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B27] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B25] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B27] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });

@@ -2,7 +2,7 @@
 // Caches the game shell so it works offline. Bump CACHE_VERSION to force users
 // to fetch the new HTML/icons on their next online visit.
 
-const CACHE_VERSION = 'core-breaker-v26';
+const CACHE_VERSION = 'core-breaker-v27';
 const ASSETS = [
   './',
   './index.html',
@@ -63,6 +63,17 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       }).catch(() => caches.match(req))
+    );
+  }
+});
+
+// Message handler — lets the page command the SW.
+// Currently used by the in-app FORCE RELOAD button to wipe all caches.
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+  if (event.data.type === 'CLEAR_CACHE') {
+    event.waitUntil(
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
     );
   }
 });
