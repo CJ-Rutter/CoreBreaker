@@ -1579,7 +1579,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 20</span>
+      <span class="build-stamp" id="build-stamp">BUILD 21</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2656,45 +2656,57 @@ function cancelSmelt(slotIdx) {
 
 // Process completed smelts (called each tick).
 // If auto-smelt is enabled for a completed recipe and materials are available, requeue it.
+// Fill any empty smelt slots with auto-smelt-enabled recipes the player can afford.
+// Returns true if at least one slot was filled. Called from processSmeltQueue and
+// from offline progress so auto-smelt resumes naturally on cold open.
+function fillAutoSmeltSlots() {
+  if (!state.autoSmelt) return false;
+  let filled = false;
+  // Stable ordering: iterate auto-smelt enabled recipes in their definition order.
+  // This way if multiple are competing for the same materials, the earlier-defined
+  // recipe wins consistently rather than randomly.
+  for (const recipe of SMELT_RECIPES) {
+    if (!state.autoSmelt[recipe.id]) continue;
+    while (state.smeltQueue.length < SMELT_SLOTS && canAfford(recipe.inputs)) {
+      pay(recipe.inputs);
+      const now = Date.now();
+      state.smeltQueue.push({
+        recipeId: recipe.id,
+        startTime: now,
+        endTime: now + recipe.time * 1000,
+      });
+      filled = true;
+    }
+    if (state.smeltQueue.length >= SMELT_SLOTS) break;
+  }
+  return filled;
+}
+
 function processSmeltQueue() {
-  if (!state.smeltQueue || state.smeltQueue.length === 0) return false;
-  const now = Date.now();
+  // Even if the queue is empty, auto-smelt may need to seed it from a cold start
   let changed = false;
-  const completedRecipeIds = []; // collect for auto-requeue after filtering
-  state.smeltQueue = state.smeltQueue.filter(job => {
-    if (now >= job.endTime) {
-      const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
-      if (recipe) {
-        addQty(recipe.output, recipe.qty);
-        completedRecipeIds.push(recipe.id);
-      }
-      changed = true;
-      return false; // remove from queue
-    }
-    return true;
-  });
-  // Play one chime per tick if anything finished, even if multiple jobs converged
-  if (completedRecipeIds.length > 0) {
-    Sfx.play('smeltDone');
-  }
-  // Auto-requeue if toggled on
-  for (const rid of completedRecipeIds) {
-    if (state.autoSmelt && state.autoSmelt[rid]) {
-      if (state.smeltQueue.length < SMELT_SLOTS) {
-        const recipe = SMELT_RECIPES.find(r => r.id === rid);
-        if (recipe && canAfford(recipe.inputs)) {
-          pay(recipe.inputs);
-          const now2 = Date.now();
-          state.smeltQueue.push({
-            recipeId: rid,
-            startTime: now2,
-            endTime: now2 + recipe.time * 1000,
-          });
-          changed = true;
+  if (state.smeltQueue && state.smeltQueue.length > 0) {
+    const now = Date.now();
+    const completedRecipeIds = [];
+    state.smeltQueue = state.smeltQueue.filter(job => {
+      if (now >= job.endTime) {
+        const recipe = SMELT_RECIPES.find(r => r.id === job.recipeId);
+        if (recipe) {
+          addQty(recipe.output, recipe.qty);
+          completedRecipeIds.push(recipe.id);
         }
+        changed = true;
+        return false;
       }
+      return true;
+    });
+    if (completedRecipeIds.length > 0) {
+      Sfx.play('smeltDone');
     }
   }
+  // Proactively keep auto-smelt slots full — handles cold start, freed slots,
+  // and newly-affordable recipes (e.g., as ore arrives from auto-mining).
+  if (fillAutoSmeltSlots()) changed = true;
   return changed;
 }
 
@@ -4075,6 +4087,11 @@ function processOfflineProgress() {
     });
   }
 
+  // After offline catch-up, fill any empty slots with auto-smelt recipes
+  // using whatever materials are now available. This way the queue isn't
+  // empty when the regular tick takes over.
+  fillAutoSmeltSlots();
+
   // Display report
   const mins = Math.floor(elapsed / 60);
   const hrs = Math.floor(mins / 60);
@@ -4108,9 +4125,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B20] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B21] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B20] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B21] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
