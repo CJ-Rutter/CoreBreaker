@@ -1579,7 +1579,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 18</span>
+      <span class="build-stamp" id="build-stamp">BUILD 19</span>
     </div>
     <div class="header-stats">
       <div>
@@ -3344,7 +3344,7 @@ function renderUpgrades() {
       <div class="card-effect">▸ ${u.effect(lvl)}</div>
       ${maxed ? '<div class="card-cost"><span style="color:var(--emerald)">✓ MAXED</span></div>' :
         `<div class="card-cost"><div class="cost-item">
-          <span class="cost-amount ${afford ? '' : 'lack'}">◈ ${fmt(cost)}</span>
+          <span class="cost-amount ${afford ? '' : 'lack'}" data-upgrade-cost="${u.id}">◈ ${fmt(cost)}</span>
         </div></div>`}
     </div>`;
   }).join('');
@@ -3354,6 +3354,21 @@ function renderUpgrades() {
       buyUpgrade(u);
       renderAll();
     });
+  });
+}
+
+// Cheap live-update for the Gear tab: only flip the .lack class on cost labels,
+// don't rebuild any DOM. This way the affordability color responds in real time
+// as the player earns credits, without disturbing tap targets.
+function updateUpgradeAffordability() {
+  const labels = document.querySelectorAll('[data-upgrade-cost]');
+  labels.forEach(label => {
+    const u = UPGRADES.find(x => x.id === label.dataset.upgradeCost);
+    if (!u) return;
+    const lvl = state.upgrades[u.id] || 0;
+    if (lvl >= u.maxLevel) return;
+    const cost = upgradeCost(u);
+    label.classList.toggle('lack', state.credits < cost);
   });
 }
 
@@ -3954,10 +3969,13 @@ function tick() {
         renderForge();
       }
     } else if (activeView.id === 'view-research') {
-      // Re-render frequently when locked (depth/credit gates need live update)
-      if (!state.labUnlocked) {
-        renderResearch();
-      }
+      // Re-render frequently — research costs need to reflect ingot/alloy counts in real time
+      // as smelts complete in the background. Research nodes have no input controls so a full
+      // rebuild is safe.
+      renderResearch();
+    } else if (activeView.id === 'view-gear') {
+      // Cheap surgical update — only flips affordability colors, no DOM rebuild
+      updateUpgradeAffordability();
     }
   }
 }
@@ -4071,9 +4089,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B18] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B19] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B18] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B19] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
