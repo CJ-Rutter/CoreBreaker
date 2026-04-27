@@ -1610,7 +1610,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 28</span>
+      <span class="build-stamp" id="build-stamp">BUILD 29</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2129,6 +2129,10 @@ const UPGRADES = [
     base: 100, growth: 2.05,
     effect: l => `${(l*0.4).toFixed(1)} mines/sec`,
     apply: (s, l) => s.autoRate = l*0.4 },
+  { id: 'drillServos', name: 'Drill Servos', desc: 'Dig taps fill the excavate bar faster', maxLevel: 30,
+    base: 600, growth: 1.7,
+    effect: l => `×${(1 + l*0.15).toFixed(2)} dig speed`,
+    apply: (s, l) => s.gearDigSpeedMult = 1 + l*0.15 },
   { id: 'capacity', name: 'Cargo Bay', desc: 'Reduces ore and progress cost per dig', maxLevel: 25,
     base: 400, growth: 1.85,
     effect: l => `-${(l*2.5).toFixed(1)}% dig cost`,
@@ -2174,11 +2178,13 @@ const RESEARCH = [
     requires: { unlockWorld: 1 },
     effect: l => `-${l*5}% lunar dig cost`,
     apply: (s, l) => s.lunarDigMult = Math.max(0.3, 1 - l*0.05) },
-  { id: 'r_autodig', name: 'Auto-Excavator', desc: 'Drone arm digs deeper automatically (still consumes ore)', maxLevel: 5,
-    cost: l => ({ aetheralloy: Math.ceil(2 * Math.pow(2.4, l)), arcalloy: Math.ceil(1 + l*1) }),
-    requires: { unlockWorld: 1 },
-    effect: l => `${(l*0.2).toFixed(1)} auto-digs/sec`,
-    apply: (s, l) => s.autoDigRate = l*0.2 },
+  { id: 'r_autodig', name: 'Auto-Excavator', desc: 'Drone arm digs deeper automatically (still consumes ore)', maxLevel: 8,
+    cost: l => l < 3
+      ? ({ iron_ingot: Math.ceil(8 * Math.pow(2.0, l)), copper_ingot: Math.ceil(6 * Math.pow(2.0, l)) })
+      : ({ aetheralloy: Math.ceil(2 * Math.pow(2.4, l - 3)), arcalloy: Math.ceil(1 + (l-3)) }),
+    requires: { unlockDepth: 200 },
+    effect: l => `${(l*0.4).toFixed(1)} auto-digs/sec`,
+    apply: (s, l) => s.autoDigRate = l*0.4 },
   { id: 'r_pyroforge', name: 'Pyroforge', desc: 'Volcanic ore yields multiplied', maxLevel: 5,
     cost: l => ({ pyrosteel: Math.ceil(2 * Math.pow(2.6, l)), starforge: Math.ceil(1 * Math.pow(2.6, l)), inferno: Math.ceil(1 + l*1) }),
     requires: { unlockWorld: 2 },
@@ -2589,9 +2595,11 @@ function currentLayer() {
 
 function digCost() {
   const base = 50;
-  // Two-stage curve: gentle 1.05^d/5 for first 200m, then 1.07^d/5 dominates
+  // Two-stage curve: gentle 1.05^d/5 throughout, then a softer 1.045^d/5
+  // doubles every ~80m past 200m (was 1.07 = ~50m doubling, which scaled
+  // into a wall at 400m+ before players had Lunar Auto-Excavator access).
   const scaleA = Math.pow(1.05, state.depth / 5);
-  const scaleB = Math.pow(1.07, Math.max(0, state.depth - 200) / 5);
+  const scaleB = Math.pow(1.045, Math.max(0, state.depth - 200) / 5);
   const scale = scaleA * scaleB;
   let mult = (buffs.digMult || 1);
   if (state.currentWorld === 1) mult *= (buffs.lunarDigMult || 1) * 1.4;
@@ -2860,6 +2868,7 @@ function recalcBuffs() {
   buffs = {
     clickMult: 1, autoRate: 0, digMult: 1, depthBonus: 0, valueMult: 1,
     researchClickMult: 1, researchAutoMult: 1, digSpeedMult: 1,
+    gearDigSpeedMult: 1,
     doubleChance: 0, voidMult: 1, lunarDigMult: 1, volcanicMult: 1,
     autoDigRate: 0,
   };
@@ -2944,7 +2953,7 @@ function digDeeper(amount = 1) {
   }
   state.ores[oreId] = have - oreCost;
   const cost = digCost();
-  state.digProgress += amount * buffs.digSpeedMult;
+  state.digProgress += amount * buffs.digSpeedMult * buffs.gearDigSpeedMult;
   Sfx.play('dig');
   if (state.digProgress >= cost) {
     const overflow = state.digProgress - cost;
@@ -4211,7 +4220,7 @@ function processOfflineProgress() {
     const cost = digOreCost();
     const layer = currentLayer();
     // Conservative: assume half the digs spend ore and contribute to progress
-    state.digProgress = (state.digProgress || 0) + totalDigs * 5 * (buffs.digSpeedMult || 1);
+    state.digProgress = (state.digProgress || 0) + totalDigs * 5 * (buffs.digSpeedMult || 1) * (buffs.gearDigSpeedMult || 1);
   }
 
   // Apply gains
@@ -4409,9 +4418,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B28] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B29] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B28] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B29] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
