@@ -1610,7 +1610,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 27</span>
+      <span class="build-stamp" id="build-stamp">BUILD 28</span>
     </div>
     <div class="header-stats">
       <div>
@@ -3084,7 +3084,12 @@ const PX_PER_METER = 4; // 1 meter = 4 pixels in the scroll world
 // Where the drill sight-line falls in the canvas (bottom-offset). Must match rig position.
 // Rig is at bottom: 16px + 130px tall = drill tip roughly at bottom: 16-24px.
 // Visually the "current depth" line should be near the drill tip area.
-const SIGHT_LINE_FROM_TOP_PERCENT = 0.78; // sight line near drill tip (bottom of canvas)
+// Pixels from the bottom of the shaft canvas where the depth-tracker line sits.
+// Must match the actual drill tip position so depth ruler ticks visually align
+// with the drill bit's leading edge. The drill tip lives at:
+//   .rig (bottom: 16px) + .rig-bit (bottom: 0 within rig) + tiny tip taper
+// So 16px from the canvas bottom is where the bit point hits.
+const SIGHT_LINE_FROM_BOTTOM_PX = 16;
 
 let _depthWorldLastKey = null;
 function buildDepthWorldForCurrentSector() {
@@ -3254,12 +3259,13 @@ function updateDepthWorld() {
   buildDepthWorldForCurrentSector();
   const scroll = document.getElementById('depth-scroll');
   if (!scroll) return;
-  // Compute translate: drill sight-line sits at SIGHT_LINE_FROM_TOP_PERCENT of the canvas
-  // We want state.depth to land at that y-position in the viewport.
   const canvas = document.getElementById('shaft-canvas');
   if (!canvas) return;
   const canvasH = canvas.clientHeight;
-  const sightY = canvasH * SIGHT_LINE_FROM_TOP_PERCENT;
+  // Sight-line: distance from top of canvas where state.depth should appear.
+  // Computed as canvasH minus a fixed bottom offset so it tracks the drill tip,
+  // not a fraction of the canvas (which would drift on different screen sizes).
+  const sightY = canvasH - SIGHT_LINE_FROM_BOTTOM_PX;
   const offset = state.depth * PX_PER_METER - sightY;
   scroll.style.transform = `translateY(${-offset}px)`;
 }
@@ -4403,9 +4409,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B27] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B28] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B27] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B28] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
