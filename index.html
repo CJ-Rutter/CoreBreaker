@@ -1031,6 +1031,55 @@
     box-shadow: none;
     text-shadow: none;
   }
+
+  /* Auto-sell row — sits below the manual sell controls in each ore card */
+  .auto-sell-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--line);
+  }
+  .auto-sell-reserve {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .auto-sell-reserve-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+  }
+  .auto-sell-reserve-input {
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 4px 6px;
+    width: 64px;
+    text-align: right;
+    -moz-appearance: textfield;
+  }
+  .auto-sell-reserve-input::-webkit-outer-spin-button,
+  .auto-sell-reserve-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .auto-sell-reserve-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .auto-sell-reserve-input:focus {
+    outline: none;
+    border-color: var(--amber);
+    box-shadow: 0 0 6px rgba(255,179,71,0.3);
+  }
   .ore-sell-price {
     font-size: 10px;
     color: var(--text-faint);
@@ -1669,7 +1718,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 30</span>
+      <span class="build-stamp" id="build-stamp">BUILD 31</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2278,6 +2327,9 @@ const DEFAULT_STATE = {
   // Notification de-dupe — persists so we don't re-fire toasts for already-discovered things
   seenOres: [],       // ore ids the player has already had unlocked at some point
   seenLayer: '',      // last layer name the player saw the "DIG NEEDS x" toast for
+  // Auto-sell config: per-ore reserve threshold. Stored as { oreId: { on: bool, reserve: number } }.
+  // When on, anything above the reserve count is auto-sold every tick.
+  autoSell: {},
   lastSaved: Date.now(),
 };
 
@@ -2845,6 +2897,29 @@ function fillAutoSmeltSlots() {
   return filled;
 }
 
+// Auto-sell: every tick, scan ores with auto-sell ON and sell anything above
+// the reserve threshold. Silent (no toasts) — credits just tick up. Returns
+// true if anything was sold (for cheap conditional re-render in the tick loop).
+function processAutoSell() {
+  if (!state.autoSell) return false;
+  let soldAny = false;
+  for (const [oreId, cfg] of Object.entries(state.autoSell)) {
+    if (!cfg || !cfg.on) continue;
+    const have = state.ores[oreId] || 0;
+    const reserve = Math.max(0, cfg.reserve || 0);
+    const overflow = have - reserve;
+    if (overflow <= 0) continue;
+    // Sell the overflow. sellItem normally plays a sound; we want auto-sell silent
+    // so we inline the credit math instead of calling sellItem directly.
+    const price = sellPrice(oreId) * overflow;
+    state.ores[oreId] = reserve;
+    state.credits += price;
+    state.totalSold = (state.totalSold || 0) + overflow;
+    soldAny = true;
+  }
+  return soldAny;
+}
+
 function processSmeltQueue() {
   // Even if the queue is empty, auto-smelt may need to seed it from a cold start
   let changed = false;
@@ -3385,8 +3460,11 @@ function renderInventory() {
   const renderRow = (id, def, count, locked = false, depthGate = null) => {
     const price = sellPrice(id);
     const canSell = !locked && count > 0;
-    // Default amount is whatever the user previously selected (cached) or 0 if fresh
     const initialAmt = canSell ? Math.min(count, sellAmounts[id] || 0) : 0;
+    // Auto-sell config: ON state and reserve threshold
+    const auto = (state.autoSell && state.autoSell[id]) || { on: false, reserve: 0 };
+    const autoOn = !!auto.on;
+    const reserve = auto.reserve || 0;
     return `<div class="ore-row ${locked ? 'locked' : ''}">
       <div class="ore-icon" style="--ore-color:${def.color}">${def.sym}</div>
       <div class="ore-info">
@@ -3412,6 +3490,18 @@ function renderInventory() {
             for <span class="credits" data-summary-credits="${id}">◈${fmt(initialAmt * price)}</span>
           </div>
           <button class="sell-go-btn" data-sell="${id}" ${initialAmt > 0 ? '' : 'disabled'}>SELL</button>
+        </div>
+        <div class="auto-sell-row">
+          <button class="auto-toggle ${autoOn ? 'on' : ''}" data-auto-sell="${id}">
+            <span class="auto-dot"></span>
+            <span class="auto-label">AUTO-SELL ${autoOn ? 'ON' : 'OFF'}</span>
+          </button>
+          <div class="auto-sell-reserve">
+            <span class="auto-sell-reserve-label">KEEP</span>
+            <input type="number" class="auto-sell-reserve-input" data-reserve="${id}"
+              value="${reserve}" min="0" step="1" inputmode="numeric"
+              ${autoOn ? '' : 'disabled'}>
+          </div>
         </div>
       </div>`}
     </div>`;
@@ -3533,6 +3623,36 @@ function renderInventory() {
           onConfirm: doSell,
         });
       }
+    });
+  });
+
+  // Wire auto-sell toggles (ON/OFF)
+  list.querySelectorAll('[data-auto-sell]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.autoSell;
+      if (!state.autoSell) state.autoSell = {};
+      if (!state.autoSell[id]) state.autoSell[id] = { on: false, reserve: 0 };
+      state.autoSell[id].on = !state.autoSell[id].on;
+      const def = getItemDef(id);
+      toast(`◉ ${def?.name?.toUpperCase() || id} AUTO-SELL ${state.autoSell[id].on ? 'ON' : 'OFF'}`);
+      Sfx.play('tap');
+      renderInventory();
+    });
+  });
+
+  // Wire reserve threshold inputs — debounced so typing doesn't fire a render
+  // for every keystroke. Update flag also keeps live re-renders out of the way.
+  list.querySelectorAll('[data-reserve]').forEach(input => {
+    input.addEventListener('focus', () => { _stashInteracting = true; });
+    input.addEventListener('blur',  () => { _stashInteracting = false; });
+    input.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const id = input.dataset.reserve;
+      const val = Math.max(0, parseInt(input.value) || 0);
+      if (!state.autoSell) state.autoSell = {};
+      if (!state.autoSell[id]) state.autoSell[id] = { on: false, reserve: 0 };
+      state.autoSell[id].reserve = val;
     });
   });
 }
@@ -4196,6 +4316,8 @@ function tick() {
     renderForge();
     renderInventory();
   }
+  // Process auto-sell — drain ore overflow into credits
+  const soldChanged = processAutoSell();
 
   saveCounter += dt;
   if (saveCounter > 5) {
@@ -4478,9 +4600,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B30] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B31] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B30] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B31] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
