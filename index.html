@@ -703,6 +703,65 @@
     gap: 4px;
   }
   .dig-btn-cost.lack { color: var(--danger); }
+
+  /* Single EXCAVATE button — replaces the old MINE + DIG DEEPER pair.
+     Each tap mines an ore, then auto-spends ore on dig progress if affordable. */
+  .excavate-button {
+    background: linear-gradient(180deg, var(--amber), var(--rust));
+    border: 2px solid #1a1410;
+    color: #1a1410;
+    font-family: 'Black Ops One', 'Impact', 'Oswald', 'Roboto Condensed', 'Arial Black', sans-serif;
+    padding: 14px 16px 12px;
+    cursor: pointer;
+    box-shadow:
+      0 0 0 1px var(--amber),
+      0 4px 0 0 #6b3015,
+      0 6px 14px rgba(0,0,0,0.6);
+    transition: box-shadow 0.08s, transform 0.08s;
+    text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.25), 0 -1px 0 rgba(0,0,0,0.3);
+    touch-action: none;
+    user-select: none;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    line-height: 1;
+    font-weight: 400;
+  }
+  .excavate-button:active {
+    transform: translateY(2px);
+    box-shadow:
+      0 0 0 1px var(--amber),
+      0 1px 0 0 #6b3015,
+      0 2px 6px rgba(0,0,0,0.6);
+  }
+  .excavate-label {
+    font-size: 18px;
+    letter-spacing: 4px;
+  }
+  .excavate-cost {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: rgba(26,20,16,0.85);
+    text-shadow: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-top: 2px;
+    text-transform: none;
+  }
+  .excavate-cost.lack {
+    color: rgba(80, 10, 10, 0.95);
+  }
+  .excavate-cost .sym {
+    font-weight: 800;
+    color: var(--cost-color, #1a1410);
+    text-shadow: 0 0 4px var(--cost-color, transparent);
+  }
   .dig-btn-cost .sym {
     font-weight: bold;
     color: var(--cost-color, var(--amber-bright));
@@ -1610,7 +1669,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 29</span>
+      <span class="build-stamp" id="build-stamp">BUILD 30</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1705,13 +1764,10 @@
         <span id="dig-progress-text">0 / 100</span>
       </div>
       <div class="dig-bar"><div class="dig-fill" id="dig-fill" style="width:0%"></div></div>
-      <div class="action-buttons">
-        <button class="mine-button" id="mine-btn">MINE</button>
-        <button class="dig-btn" id="dig-btn">
-          <span class="dig-btn-label">⛏ DIG DEEPER</span>
-          <span class="dig-btn-cost" id="dig-btn-cost">—</span>
-        </button>
-      </div>
+      <button class="excavate-button" id="excavate-btn">
+        <span class="excavate-label">⛏ EXCAVATE</span>
+        <span class="excavate-cost" id="excavate-cost">—</span>
+      </button>
     </div>
   </div>
 
@@ -2940,21 +2996,26 @@ function spawnParticle(o) {
   setTimeout(() => p.remove(), 1200);
 }
 
-function digDeeper(amount = 1) {
+// `silent` mode: don't toast/error on insufficient ore. Used by EXCAVATE,
+// which calls digDeeper opportunistically on every tap — failing to dig
+// because of low ore should be quiet, not noisy.
+function digDeeper(amount = 1, silent = false) {
   const layer = currentLayer();
   const oreId = layer.digOre;
   const have = state.ores[oreId] || 0;
   const oreCost = digOreCost();
   if (have < oreCost) {
-    const oreName = ORES[oreId]?.name || oreId;
-    toast(`✕ NEED ${oreCost} ${oreName.toUpperCase()}`);
-    Sfx.play('error');
+    if (!silent) {
+      const oreName = ORES[oreId]?.name || oreId;
+      toast(`✕ NEED ${oreCost} ${oreName.toUpperCase()}`);
+      Sfx.play('error');
+    }
     return false;
   }
   state.ores[oreId] = have - oreCost;
   const cost = digCost();
   state.digProgress += amount * buffs.digSpeedMult * buffs.gearDigSpeedMult;
-  Sfx.play('dig');
+  if (!silent) Sfx.play('dig');
   if (state.digProgress >= cost) {
     const overflow = state.digProgress - cost;
     state.depth += 1;
@@ -3061,20 +3122,23 @@ function renderShaft() {
   document.getElementById('dig-fill').style.width = pct + '%';
   document.getElementById('dig-progress-text').textContent = `${fmt(state.digProgress)} / ${fmt(cost)}`;
 
-  // Dig ore cost UI
+  // Dig ore cost UI — shown on the EXCAVATE button as the secondary line.
+  // The button itself is never disabled because mining always works; the cost
+  // line just turns red when the dig portion can't fire (as a visual hint
+  // that the player needs more ore for layer progress).
   const oreId = l.digOre;
   const oreDef = ORES[oreId];
   const have = state.ores[oreId] || 0;
   const oreCost = digOreCost();
   const canPay = have >= oreCost;
-  const btn = document.getElementById('dig-btn');
-  btn.disabled = !canPay;
-  const costEl = document.getElementById('dig-btn-cost');
-  costEl.classList.toggle('lack', !canPay);
-  costEl.style.setProperty('--cost-color', oreDef?.color || 'var(--amber-bright)');
-  costEl.innerHTML = oreDef
-    ? `COST: <span class="sym">${oreDef.sym}</span> ${fmt(have)} / ${oreCost} ${oreDef.name.toUpperCase()}`
-    : `COST: ${oreCost}`;
+  const costEl = document.getElementById('excavate-cost');
+  if (costEl) {
+    costEl.classList.toggle('lack', !canPay);
+    costEl.style.setProperty('--cost-color', oreDef?.color || 'var(--amber-bright)');
+    costEl.innerHTML = oreDef
+      ? `DIG: <span class="sym">${oreDef.sym}</span> ${fmt(have)}/${oreCost} ${oreDef.name.toUpperCase()}`
+      : `DIG: ${oreCost}`;
+  }
 
   updateDepthWorld();
   updateNextLayerPill(l);
@@ -4061,36 +4125,32 @@ function attachHoldButton(btn, action, opts = {}) {
   // (handled implicitly because action returns false when no ore)
 }
 
-// MINE button — immediate-fire on press, accelerating repeats while held
-attachHoldButton(document.getElementById('mine-btn'), () => {
+// EXCAVATE button — combined mine + dig. Each tap mines an ore and silently
+// attempts a dig if enough ore is in the bank. Hold to auto-repeat at
+// accelerating intervals.
+attachHoldButton(document.getElementById('excavate-btn'), () => {
+  // Mine first (this is the primary action — always succeeds if there's any
+  // ore in this layer, which there always is)
   mineOnce(false);
+  // Opportunistic dig (silent if can't afford — no error spam)
+  digDeeper(10, true);
   renderHeader();
   renderOreStrip();
-  return true;
+  renderShaft();
+  renderInventory();
+  return true; // never stop auto-repeat from this button
 }, { initialDelay: 350, startInterval: 200, minInterval: 70, accel: 0.88 });
-
-// DIG button — same pattern, returns false to stop when out of ore
-attachHoldButton(document.getElementById('dig-btn'), () => {
-  if (digDeeper(10)) {
-    renderShaft();
-    renderOreStrip();
-    renderInventory();
-    return true;
-  }
-  return false; // out of ore: stop the auto-repeat
-}, { initialDelay: 400, startInterval: 250, minInterval: 80, accel: 0.85 });
 
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.code === 'Space') {
     e.preventDefault();
     mineOnce(false);
+    digDeeper(10, true);
     renderHeader();
     renderOreStrip();
-  } else if (e.code === 'KeyD') {
-    digDeeper(10);
     renderShaft();
-    renderOreStrip();
+    renderInventory();
   }
 });
 
@@ -4418,9 +4478,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B29] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B30] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B29] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B30] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
