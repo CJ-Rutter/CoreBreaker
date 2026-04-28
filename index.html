@@ -1718,7 +1718,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 31</span>
+      <span class="build-stamp" id="build-stamp">BUILD 32</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2703,12 +2703,23 @@ function currentLayer() {
 
 function digCost() {
   const base = 50;
-  // Two-stage curve: gentle 1.05^d/5 throughout, then a softer 1.045^d/5
-  // doubles every ~80m past 200m (was 1.07 = ~50m doubling, which scaled
-  // into a wall at 400m+ before players had Lunar Auto-Excavator access).
-  const scaleA = Math.pow(1.05, state.depth / 5);
-  const scaleB = Math.pow(1.045, Math.max(0, state.depth - 200) / 5);
-  const scale = scaleA * scaleB;
+  // Three-stage curve:
+  //   0-200m:   gentle 1.05^(d/5) — feels like initial difficulty ramp
+  //   200-500m: 1.045^(d/5) compound on top — meaningful late-game challenge
+  //   500m+:    LINEAR growth past the value at 500m — prevents walls of impossible
+  //             cost. Each meter adds ~3.3% of the value at 500m, so traversing
+  //             500-1000m costs ~30x the 500m cost in TOTAL, not per-meter.
+  let scale;
+  if (state.depth <= 500) {
+    const scaleA = Math.pow(1.05, state.depth / 5);
+    const scaleB = Math.pow(1.045, Math.max(0, state.depth - 200) / 5);
+    scale = scaleA * scaleB;
+  } else {
+    // Anchor at 500m, then add a linear ramp
+    const scaleAt500 = Math.pow(1.05, 100) * Math.pow(1.045, 60);
+    const linearRamp = (state.depth - 500) / 30; // each meter adds 1/30 of scaleAt500
+    scale = scaleAt500 * (1 + linearRamp);
+  }
   let mult = (buffs.digMult || 1);
   if (state.currentWorld === 1) mult *= (buffs.lunarDigMult || 1) * 1.4;
   if (state.currentWorld === 2) mult *= 4.5;
@@ -4600,9 +4611,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B31] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B32] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B31] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B32] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
