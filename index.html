@@ -1774,7 +1774,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 35</span>
+      <span class="build-stamp" id="build-stamp">BUILD 36</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2370,6 +2370,14 @@ const DEFAULT_STATE = {
   digProgress: 0,
   currentWorld: 0,
   unlockedWorlds: [0],
+  // Per-world saved depth and partial dig progress. When you switch worlds,
+  // current depth + digProgress are stashed here, and the new world's saved
+  // values are loaded so you resume where you left off in that world.
+  worldDepths: { 0: 0 },        // world id → depth in that world
+  worldDigProgress: { 0: 0 },   // world id → partial dig progress
+  // Per-world max depth tracker (separate from global maxDepth) — useful for
+  // missions and per-world stats later.
+  worldMaxDepths: { 0: 0 },
   upgrades: {},
   research: {},
   totalClicks: 0,
@@ -2456,6 +2464,24 @@ function migrateState(s) {
       else if (v === false) s.autoSmelt[k] = 0;
       else if (typeof v !== 'number') s.autoSmelt[k] = 0;
     }
+  }
+
+  // Backfill per-world depth tracking. Existing saves only have a single
+  // `state.depth` for the active world; we treat that as the value for
+  // currentWorld, leaving other worlds at 0. Without this, a player who's
+  // dug deep in Earth and switches to Lunar for the first time would lose
+  // their Earth depth on the way back.
+  if (!s.worldDepths || typeof s.worldDepths !== 'object') s.worldDepths = {};
+  if (!s.worldDigProgress || typeof s.worldDigProgress !== 'object') s.worldDigProgress = {};
+  if (!s.worldMaxDepths || typeof s.worldMaxDepths !== 'object') s.worldMaxDepths = {};
+  if (s.worldDepths[s.currentWorld] === undefined) {
+    s.worldDepths[s.currentWorld] = s.depth || 0;
+  }
+  if (s.worldDigProgress[s.currentWorld] === undefined) {
+    s.worldDigProgress[s.currentWorld] = s.digProgress || 0;
+  }
+  if (s.worldMaxDepths[s.currentWorld] === undefined) {
+    s.worldMaxDepths[s.currentWorld] = s.maxDepth || s.depth || 0;
   }
 
   s.v = SAVE_VERSION;
@@ -3176,6 +3202,11 @@ function digDeeper(amount = 1, silent = false) {
     const overflow = state.digProgress - cost;
     state.depth += 1;
     if (state.depth > state.maxDepth) state.maxDepth = state.depth;
+    // Also track per-world max so missions/stats can scale per world later
+    if (!state.worldMaxDepths) state.worldMaxDepths = {};
+    if (state.depth > (state.worldMaxDepths[state.currentWorld] || 0)) {
+      state.worldMaxDepths[state.currentWorld] = state.depth;
+    }
     state.digProgress = overflow;
     checkOreUnlocks();
     checkLayerChange();
@@ -3244,14 +3275,27 @@ function unlockWorld(w) {
 function switchWorld(wid) {
   if (!state.unlockedWorlds.includes(wid)) return;
   if (state.currentWorld === wid) return;
+
+  // Stash current world's depth + dig progress before switching
+  if (!state.worldDepths) state.worldDepths = {};
+  if (!state.worldDigProgress) state.worldDigProgress = {};
+  if (!state.worldMaxDepths) state.worldMaxDepths = {};
+  state.worldDepths[state.currentWorld] = state.depth;
+  state.worldDigProgress[state.currentWorld] = state.digProgress;
+  state.worldMaxDepths[state.currentWorld] = Math.max(
+    state.worldMaxDepths[state.currentWorld] || 0, state.depth
+  );
+
+  // Switch and restore the target world's saved progress
   state.currentWorld = wid;
-  state.depth = 0;
-  state.digProgress = 0;
+  state.depth = state.worldDepths[wid] || 0;
+  state.digProgress = state.worldDigProgress[wid] || 0;
+
   // seenOres / seenLayer carry across worlds — different worlds have different
   // ore IDs and layer names, so first-time discovery still toasts correctly.
   checkOreUnlocks();
   checkLayerChange();
-  toast(`▶ ${WORLDS[wid].name.toUpperCase()}`);
+  toast(`▶ ${WORLDS[wid].name.toUpperCase()}${state.depth > 0 ? ` · RESUMING ${state.depth}m` : ''}`);
 }
 
 // ============================================================
@@ -4735,9 +4779,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B35] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B36] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B35] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B36] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
