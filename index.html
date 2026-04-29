@@ -1774,7 +1774,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 34</span>
+      <span class="build-stamp" id="build-stamp">BUILD 35</span>
     </div>
     <div class="header-stats">
       <div>
@@ -2065,7 +2065,7 @@ const ORES = {
   silver:    { sym: 'Ag',name: 'Silver',    color: '#e0e0f0', value: 180,  minDepth: 250,  world: 0 },
   gold:      { sym: 'Au',name: 'Gold',      color: '#ffd24a', value: 500,  minDepth: 450,  world: 0 },
   diamond:   { sym: '◆', name: 'Diamond',   color: '#a8e8ff', value: 1500, minDepth: 750,  world: 0 },
-  obsidian:  { sym: 'Ob',name: 'Obsidian',  color: '#9966ff', value: 4500, minDepth: 1200, world: 0 },
+  obsidian:  { sym: 'Ob',name: 'Obsidian',  color: '#9966ff', value: 4500, minDepth: 850,  world: 0 },
   regolith:  { sym: 'R', name: 'Regolith',  color: '#b8b8c8', value: 80,   minDepth: 0,    world: 1 },
   helium3:   { sym: 'He',name: 'Helium-3',  color: '#90f0ff', value: 250,  minDepth: 30,   world: 1 },
   titanium:  { sym: 'Ti',name: 'Titanium',  color: '#d4d4e8', value: 700,  minDepth: 100,  world: 1 },
@@ -4735,9 +4735,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B34] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B35] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B34] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B35] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
