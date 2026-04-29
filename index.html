@@ -862,6 +862,21 @@
   .excavate-label {
     font-size: 18px;
     letter-spacing: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .excavate-icon {
+    width: 26px;
+    height: 18px;
+    flex-shrink: 0;
+    /* Subtle drop shadow to match the embossed text look */
+    filter: drop-shadow(0 1px 0 rgba(255,255,255,0.2));
+  }
+  /* When the EXCAVATE button is being pressed, the icon "leans" forward
+     slightly — purely cosmetic, sells the action a tiny bit */
+  .excavate-button:active .excavate-icon {
+    transform: translateX(1px);
   }
   .excavate-cost {
     font-family: 'JetBrains Mono', monospace;
@@ -1896,7 +1911,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 37</span>
+      <span class="build-stamp" id="build-stamp">BUILD 38</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1997,7 +2012,26 @@
       <div class="dig-bar"><div class="dig-fill" id="dig-fill" style="width:0%"></div></div>
       <div class="focus-indicator" id="focus-indicator" style="display:none;"></div>
       <button class="excavate-button" id="excavate-btn">
-        <span class="excavate-label">⛏ EXCAVATE</span>
+        <span class="excavate-label">
+          <svg class="excavate-icon" viewBox="0 0 32 22" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <!-- Tracks: chunky base with two roller dots -->
+            <rect x="1" y="17" width="22" height="4" rx="0.5" fill="currentColor"/>
+            <circle cx="4" cy="19" r="1" fill="#1a1410"/>
+            <circle cx="11" cy="19" r="1" fill="#1a1410"/>
+            <circle cx="18" cy="19" r="1" fill="#1a1410"/>
+            <!-- Cab: operator house with window -->
+            <rect x="4" y="9" width="11" height="8" fill="currentColor"/>
+            <rect x="6" y="11" width="4" height="3" fill="#1a1410"/>
+            <!-- Boom: main arm rising up and out -->
+            <path d="M 13 11 L 24 4 L 26 5.5 L 15 12.5 Z" fill="currentColor"/>
+            <!-- Dipper: lower arm coming down from boom tip -->
+            <path d="M 24 4 L 28 11 L 26 12 L 22 5 Z" fill="currentColor"/>
+            <!-- Bucket: at the end of the dipper, with teeth -->
+            <path d="M 26 11 L 31 12 L 30.5 15 L 25.5 14 Z" fill="currentColor"/>
+            <path d="M 30.5 15 L 30.8 16 M 28 14.5 L 28.2 15.5 M 26 14 L 26.2 15" stroke="currentColor" stroke-width="0.5" fill="none"/>
+          </svg>
+          EXCAVATE
+        </span>
         <span class="excavate-cost" id="excavate-cost">—</span>
       </button>
     </div>
@@ -5261,9 +5295,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B37] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B38] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B37] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B38] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });

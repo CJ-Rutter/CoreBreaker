@@ -2,7 +2,7 @@
 // Caches the game shell so it works offline. Bump CACHE_VERSION to force users
 // to fetch the new HTML/icons on their next online visit.
 
-const CACHE_VERSION = 'core-breaker-v37';
+const CACHE_VERSION = 'core-breaker-v38';
 const ASSETS = [
   './',
   './index.html',
