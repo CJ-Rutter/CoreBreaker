@@ -191,6 +191,128 @@
   }
   .menu-btn:active { background: var(--bg-panel-hi); }
 
+  /* Mission badge — sits between hstats and menu button */
+  .missions-btn {
+    position: relative;
+    background: var(--bg-deep);
+    border: 1px solid var(--line-hi);
+    color: var(--amber-bright);
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    font-family: inherit;
+    margin-right: 4px;
+  }
+  .missions-btn:active { background: var(--bg-panel-hi); }
+  .missions-btn .missions-icon { font-size: 18px; line-height: 1; }
+  .missions-btn .missions-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--amber);
+    color: #1a1410;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 1px 4px;
+    min-width: 14px;
+    text-align: center;
+    border: 1px solid #1a1410;
+    line-height: 1.1;
+  }
+  .missions-btn .missions-count:empty,
+  .missions-btn .missions-count[data-zero="1"] { display: none; }
+  .missions-btn.has-claimable { box-shadow: 0 0 8px rgba(255,179,71,0.5); }
+  .missions-btn.has-claimable .missions-count {
+    animation: missions-pulse 1.5s infinite;
+  }
+  @keyframes missions-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  /* Mission cards inside the modal */
+  .mission-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mission-card.completed {
+    border-left-color: var(--emerald, #80ff80);
+    background: rgba(80, 255, 128, 0.04);
+  }
+  .mission-card.claimed {
+    opacity: 0.4;
+    border-left-color: var(--text-faint);
+  }
+  .mission-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .mission-desc {
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .mission-progress-bar {
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    height: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mission-progress-fill {
+    background: linear-gradient(90deg, var(--amber), var(--amber-bright));
+    height: 100%;
+    transition: width 0.2s;
+  }
+  .mission-card.completed .mission-progress-fill {
+    background: linear-gradient(90deg, #60c060, #80ff80);
+  }
+  .mission-progress-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-faint);
+    text-align: right;
+    letter-spacing: 0.5px;
+  }
+  .mission-reward {
+    font-size: 10px;
+    color: var(--amber-bright);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .mission-reward .reward-label { color: var(--text-faint); margin-right: 4px; }
+  .mission-claim-btn {
+    background: linear-gradient(180deg, var(--amber), var(--rust));
+    border: 1px solid #1a1410;
+    color: #1a1410;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 8px;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+    box-shadow: 0 2px 0 0 #6b3015;
+  }
+  .mission-claim-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 0 #6b3015; }
+  .mission-claim-btn:disabled {
+    background: var(--bg-panel);
+    color: var(--text-faint);
+    box-shadow: none;
+    text-shadow: none;
+    cursor: not-allowed;
+  }
+
   .world-strip {
     background: var(--bg-deep);
     border-bottom: 1px solid var(--line);
@@ -1774,7 +1896,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 36</span>
+      <span class="build-stamp" id="build-stamp">BUILD 37</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1786,6 +1908,10 @@
         <div class="hstat" id="power">1.0×</div>
       </div>
     </div>
+    <button class="missions-btn" id="missions-btn" aria-label="Missions">
+      <span class="missions-icon">▣</span>
+      <span class="missions-count" id="missions-count">0</span>
+    </button>
     <button class="menu-btn" id="menu-btn" aria-label="Menu">☰</button>
   </header>
   <div class="world-strip" id="world-badge">SECTOR 01 // <span>SURFACE EARTH</span></div>
@@ -1966,6 +2092,15 @@
         </div>
       </div>
       <div>
+        <div class="modal-section-title">Gameplay</div>
+        <button class="action-btn" id="btn-autodig-toggle">
+          AUTO-DIG ON TAP <span class="action-btn-arrow" id="autodig-state">ON</span>
+        </button>
+        <div style="font-size:9px;color:var(--text-faint);text-align:center;letter-spacing:1px;padding:4px 2px 0;">
+          WHEN OFF, EXCAVATE ONLY MINES (NO DIGGING)
+        </div>
+      </div>
+      <div>
         <div class="modal-section-title">App</div>
         <button class="action-btn" id="btn-force-reload">
           FORCE RELOAD <span class="action-btn-arrow">↻</span>
@@ -2053,6 +2188,19 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-missions">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">DAILY MISSIONS</div>
+      <button class="modal-close" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div id="mission-refresh-time" style="font-size:10px;color:var(--text-faint);letter-spacing:1.5px;text-align:center;text-transform:uppercase;padding:0 0 8px;"></div>
+      <div id="mission-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+</div>
+
 <div class="toast-host" id="toasts"></div>
 
 <script>
@@ -2123,7 +2271,8 @@ const COMPOSITES = {
 
 // Combined item lookup (ore id, ingot id, alloy id, or composite id → display info)
 function getItemDef(id) {
-  return ORES[id] || INGOTS[id] || ALLOYS[id] || COMPOSITES[id] || null;
+  return ORES[id] || INGOTS[id] || ALLOYS[id] || COMPOSITES[id] ||
+    (typeof DIG_RELIEF_ITEMS !== 'undefined' ? DIG_RELIEF_ITEMS[id] : null) || null;
 }
 
 // Smelting recipes: { output: id, qty: n, time: seconds, inputs: { id: amount } }
@@ -2355,6 +2504,219 @@ const RESEARCH = [
 ];
 
 // ============================================================
+// DAILY MISSIONS
+// ============================================================
+// Refresh every 24h real-time. 3 active missions. Evergreen — they sit
+// indefinitely until completed/claimed or the next refresh hits.
+// Reward tiers scale with state.maxDepth (NOT current depth) so progression
+// stays meaningful as you push deeper.
+const MISSION_REFRESH_MS = 24 * 60 * 60 * 1000;
+const MISSION_COUNT = 3;
+
+// Banked dig-relief items (live in state.items alongside ingots/alloys)
+const DIG_RELIEF_ITEMS = {
+  drill_charge:    { sym: '⚡', name: 'Drill Charge',    color: '#ffe070', tier: 0, world: -1, isRelief: true,
+    desc: 'Instantly add 200K dig progress' },
+  reinforced_bit:  { sym: '◈', name: 'Reinforced Bit',  color: '#80c0ff', tier: 0, world: -1, isRelief: true,
+    desc: '30 min · ×2 dig speed' },
+  ore_compressor:  { sym: '◇', name: 'Ore Compressor',  color: '#80ffc0', tier: 0, world: -1, isRelief: true,
+    desc: '30 min · ½ dig ore cost' },
+};
+
+// Mission generator. Picks a random mission type, scales target/reward to
+// player's progression. Returns a fresh mission object.
+function generateMission(idx, maxDepth) {
+  const tier = maxDepth < 200 ? 'early' : maxDepth < 500 ? 'mid' : 'late';
+
+  // Pick a type (weighted by what makes sense at the player's progression)
+  const types = ['deliver_ore', 'deliver_ore', 'earn_credits']; // 2x ore, 1x credits baseline
+  if (maxDepth >= 50) types.push('deliver_ingot'); // ingots from forge era
+  if (maxDepth >= 100) types.push('reach_depth'); // reach depth from a non-trivial point
+  const type = types[Math.floor(Math.random() * types.length)];
+
+  // Scale base difficulty: roughly "10-30 minutes of normal play" effort
+  const scale = Math.max(1, Math.pow(maxDepth / 50 + 1, 1.3));
+  const baseCount = Math.ceil(20 * scale);
+
+  let mission;
+  if (type === 'deliver_ore') {
+    // Pick a raw ore the player has access to
+    const ores = Object.entries(ORES).filter(([_, o]) => maxDepth >= o.minDepth);
+    if (ores.length === 0) return generateMission(idx, maxDepth); // fallback
+    const [oreId, oreDef] = ores[Math.floor(Math.random() * ores.length)];
+    // Cheaper ores need higher counts to feel meaningful
+    const valScale = Math.max(0.3, Math.min(3, 30 / oreDef.value));
+    const count = Math.ceil(baseCount * valScale);
+    mission = { type, target: oreId, count, progress: 0,
+      title: `Deliver ${count} ${oreDef.name}`,
+      desc: `Hand over ${count} ${oreDef.name.toLowerCase()} to the supply depot` };
+  } else if (type === 'deliver_ingot') {
+    // Pick an ingot the player likely has access to (unlocked smelt recipe)
+    const ingots = SMELT_RECIPES
+      .filter(r => r.tier === 1)
+      .map(r => r.output)
+      .filter(id => INGOTS[id])
+      .filter(id => maxDepth >= 50); // forge unlocks at 50m
+    if (ingots.length === 0) return generateMission(idx, maxDepth);
+    const ingotId = ingots[Math.floor(Math.random() * ingots.length)];
+    const ingotDef = INGOTS[ingotId];
+    const count = Math.max(2, Math.ceil(baseCount / 4)); // ingots more valuable
+    mission = { type, target: ingotId, count, progress: 0,
+      title: `Deliver ${count} ${ingotDef.name}`,
+      desc: `Forge and hand over ${count} ${ingotDef.name.toLowerCase()}` };
+  } else if (type === 'reach_depth') {
+    // Aim for current max + 50 to 200m, but only if reasonable
+    const target = Math.min(1000, maxDepth + 50 + Math.floor(Math.random() * 150));
+    mission = { type, target, count: target, progress: 0,
+      title: `Reach depth ${target}m`,
+      desc: `Dig down to ${target}m on any world` };
+  } else { // earn_credits
+    // 5-15 minutes of normal credit earnings — ballpark sellPrice * baseCount * 5
+    const count = Math.ceil(baseCount * Math.max(5, maxDepth * 2));
+    mission = { type, target: 'credits', count, progress: 0,
+      title: `Earn ${fmt(count)} credits`,
+      desc: `Accumulate ${fmt(count)} credits while the missions are active` };
+  }
+
+  // Reward by tier — late game emphasizes dig relief
+  mission.reward = generateReward(tier, maxDepth);
+  mission.id = `m_${Date.now()}_${idx}_${Math.random().toString(36).slice(2,7)}`;
+  mission.completed = false;
+  mission.claimed = false;
+  // For earn_credits, the baseline is the player's current credits at issue time
+  if (type === 'earn_credits') {
+    mission.baselineCredits = state.credits || 0;
+  }
+  return mission;
+}
+
+function generateReward(tier, maxDepth) {
+  if (tier === 'early') {
+    // Pure credits — 5-15 min of expected income at this depth
+    const amt = Math.ceil(500 + maxDepth * 50 * (0.8 + Math.random() * 0.6));
+    return { type: 'credits', amount: amt, label: `◈ ${fmt(amt)} credits` };
+  } else if (tier === 'mid') {
+    // 50/50 credits or ingot
+    if (Math.random() < 0.5) {
+      const amt = Math.ceil(2000 + maxDepth * 80 * (0.8 + Math.random() * 0.6));
+      return { type: 'credits', amount: amt, label: `◈ ${fmt(amt)} credits` };
+    } else {
+      // Pick a T1 ingot the player has access to
+      const ingots = SMELT_RECIPES.filter(r => r.tier === 1).map(r => r.output);
+      const id = ingots[Math.floor(Math.random() * ingots.length)];
+      const amt = 5 + Math.floor(Math.random() * 10);
+      return { type: 'item', itemId: id, amount: amt,
+        label: `${amt}× ${INGOTS[id]?.name || id}` };
+    }
+  } else { // late
+    // 60% dig relief, 40% credits/ingot
+    const r = Math.random();
+    if (r < 0.6) {
+      const reliefIds = Object.keys(DIG_RELIEF_ITEMS);
+      const id = reliefIds[Math.floor(Math.random() * reliefIds.length)];
+      // Drill charges in stacks of 2-5; bits/compressors as singletons
+      const amt = id === 'drill_charge' ? 2 + Math.floor(Math.random() * 4) : 1;
+      return { type: 'relief', itemId: id, amount: amt,
+        label: `${amt}× ${DIG_RELIEF_ITEMS[id].name}` };
+    } else if (r < 0.85) {
+      const amt = Math.ceil(10000 + maxDepth * 150 * (0.8 + Math.random() * 0.6));
+      return { type: 'credits', amount: amt, label: `◈ ${fmt(amt)} credits` };
+    } else {
+      const ingots = SMELT_RECIPES.filter(r => r.tier === 1).map(r => r.output);
+      const id = ingots[Math.floor(Math.random() * ingots.length)];
+      const amt = 10 + Math.floor(Math.random() * 20);
+      return { type: 'item', itemId: id, amount: amt,
+        label: `${amt}× ${INGOTS[id]?.name || id}` };
+    }
+  }
+}
+
+// Refresh missions if 24h has elapsed since last refresh.
+// Returns true if missions were refreshed.
+function refreshMissionsIfDue() {
+  if (!state.missions) state.missions = { active: [], lastRefresh: 0 };
+  const now = Date.now();
+  if (now - (state.missions.lastRefresh || 0) >= MISSION_REFRESH_MS ||
+      !state.missions.active || state.missions.active.length === 0) {
+    state.missions.active = [];
+    const maxDepth = state.maxDepth || 0;
+    for (let i = 0; i < MISSION_COUNT; i++) {
+      state.missions.active.push(generateMission(i, maxDepth));
+    }
+    state.missions.lastRefresh = now;
+    return true;
+  }
+  return false;
+}
+
+// Update progress on missions based on current state. Called every tick.
+function updateMissionProgress() {
+  if (!state.missions || !state.missions.active) return;
+  for (const m of state.missions.active) {
+    if (m.completed) continue;
+    if (m.type === 'deliver_ore') {
+      m.progress = state.ores[m.target] || 0;
+      if (m.progress >= m.count) m.completed = true;
+    } else if (m.type === 'deliver_ingot') {
+      m.progress = state.items[m.target] || 0;
+      if (m.progress >= m.count) m.completed = true;
+    } else if (m.type === 'reach_depth') {
+      // Check across all worlds
+      let best = 0;
+      if (state.worldMaxDepths) {
+        for (const v of Object.values(state.worldMaxDepths)) {
+          if (v > best) best = v;
+        }
+      }
+      best = Math.max(best, state.maxDepth || 0);
+      m.progress = best;
+      if (m.progress >= m.target) m.completed = true;
+    } else if (m.type === 'earn_credits') {
+      m.progress = Math.max(0, (state.credits || 0) - (m.baselineCredits || 0));
+      if (m.progress >= m.count) m.completed = true;
+    }
+  }
+}
+
+function claimMission(missionId) {
+  if (!state.missions) return false;
+  const m = state.missions.active.find(x => x.id === missionId);
+  if (!m || !m.completed || m.claimed) return false;
+
+  // For deliver missions, consume the items from inventory
+  if (m.type === 'deliver_ore') {
+    if ((state.ores[m.target] || 0) < m.count) {
+      toast('✕ INSUFFICIENT MATERIALS');
+      Sfx.play('error');
+      return false;
+    }
+    state.ores[m.target] -= m.count;
+  } else if (m.type === 'deliver_ingot') {
+    if ((state.items[m.target] || 0) < m.count) {
+      toast('✕ INSUFFICIENT MATERIALS');
+      Sfx.play('error');
+      return false;
+    }
+    state.items[m.target] -= m.count;
+  }
+
+  // Award the reward
+  const r = m.reward;
+  if (r.type === 'credits') {
+    state.credits += r.amount;
+  } else if (r.type === 'item') {
+    state.items[r.itemId] = (state.items[r.itemId] || 0) + r.amount;
+  } else if (r.type === 'relief') {
+    state.items[r.itemId] = (state.items[r.itemId] || 0) + r.amount;
+  }
+
+  m.claimed = true;
+  toast(`◉ MISSION CLAIMED · ${r.label}`);
+  Sfx.play('confirm');
+  return true;
+}
+
+// ============================================================
 // SAVE / LOAD
 // ============================================================
 const SAVE_KEY = 'corebreaker_v4';
@@ -2397,6 +2759,12 @@ const DEFAULT_STATE = {
   autoSell: {},
   // Focused ore (60% drop chance when set) — null = normal weighted distribution
   focusOre: null,
+  // Gameplay preferences
+  autoDigOnTap: true, // EXCAVATE button auto-spends ore on dig progress (false = mine only)
+  // Daily missions — refreshed every 24h, evergreen until claimed
+  missions: { active: [], lastRefresh: 0 },
+  // Active dig-relief buffs (timed effects from missions)
+  reliefBuffs: { reinforcedBitUntil: 0, oreCompressorUntil: 0 },
   lastSaved: Date.now(),
 };
 
@@ -3306,6 +3674,88 @@ function renderHeader() {
   document.getElementById('power').textContent = totalPower().toFixed(1) + '×';
   const w = WORLDS[state.currentWorld];
   document.getElementById('world-badge').innerHTML = `${w.sub} // <span>${w.name.toUpperCase()}</span>`;
+  renderMissionBadge();
+}
+
+// Update the mission count badge in the header.
+// Shows the number of CLAIMABLE missions (completed but not yet collected).
+// If 0, shows the total count of active missions instead.
+function renderMissionBadge() {
+  const btn = document.getElementById('missions-btn');
+  const countEl = document.getElementById('missions-count');
+  if (!btn || !countEl) return;
+  const active = (state.missions && state.missions.active) || [];
+  const claimable = active.filter(m => m.completed && !m.claimed).length;
+  const unclaimed = active.filter(m => !m.claimed).length;
+  if (claimable > 0) {
+    countEl.textContent = claimable;
+    countEl.removeAttribute('data-zero');
+    btn.classList.add('has-claimable');
+  } else if (unclaimed > 0) {
+    countEl.textContent = unclaimed;
+    countEl.removeAttribute('data-zero');
+    btn.classList.remove('has-claimable');
+  } else {
+    countEl.textContent = '';
+    countEl.setAttribute('data-zero', '1');
+    btn.classList.remove('has-claimable');
+  }
+}
+
+// Render the missions modal content. Called whenever the modal is opened
+// or a claim happens, so progress bars and button states stay accurate.
+function renderMissions() {
+  const list = document.getElementById('mission-list');
+  const refreshEl = document.getElementById('mission-refresh-time');
+  if (!list) return;
+
+  // Refresh countdown
+  const refreshAt = (state.missions?.lastRefresh || 0) + MISSION_REFRESH_MS;
+  const remaining = Math.max(0, refreshAt - Date.now());
+  const hours = Math.floor(remaining / 3600000);
+  const mins = Math.floor((remaining % 3600000) / 60000);
+  refreshEl.textContent = `New missions in ${hours}h ${mins}m`;
+
+  const active = (state.missions && state.missions.active) || [];
+  if (active.length === 0) {
+    list.innerHTML = `<div style="text-align:center;color:var(--text-faint);padding:20px;font-size:11px;">No missions available</div>`;
+    return;
+  }
+
+  list.innerHTML = active.map(m => {
+    const pct = Math.min(100, (m.progress / m.count) * 100);
+    const cardClass = m.claimed ? 'claimed' : (m.completed ? 'completed' : '');
+    let btnLabel, btnDisabled;
+    if (m.claimed) {
+      btnLabel = '✓ CLAIMED'; btnDisabled = true;
+    } else if (m.completed) {
+      btnLabel = 'COLLECT REWARD'; btnDisabled = false;
+    } else {
+      btnLabel = 'IN PROGRESS'; btnDisabled = true;
+    }
+    return `<div class="mission-card ${cardClass}">
+      <div class="mission-title">${m.title}</div>
+      <div class="mission-desc">${m.desc}</div>
+      <div class="mission-progress-bar"><div class="mission-progress-fill" style="width:${pct}%;"></div></div>
+      <div class="mission-progress-text">${fmt(Math.min(m.progress, m.count))} / ${fmt(m.count)}</div>
+      <div class="mission-reward"><span class="reward-label">REWARD:</span>${m.reward.label}</div>
+      <button class="mission-claim-btn" data-claim="${m.id}" ${btnDisabled ? 'disabled' : ''}>${btnLabel}</button>
+    </div>`;
+  }).join('');
+
+  // Wire claim buttons
+  list.querySelectorAll('[data-claim]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.claim;
+      if (claimMission(id)) {
+        renderMissions();
+        renderMissionBadge();
+        renderInventory();
+        renderHeader();
+      }
+    });
+  });
 }
 
 function renderShaft() {
@@ -4264,9 +4714,35 @@ function syncAudioUI() {
 document.getElementById('menu-btn').addEventListener('click', () => {
   openModal('modal-menu');
   syncAudioUI();
+  syncAutoDigUI();
+});
+
+// Missions button — opens the missions modal
+document.getElementById('missions-btn').addEventListener('click', () => {
+  refreshMissionsIfDue();
+  updateMissionProgress();
+  renderMissions();
+  openModal('modal-missions');
 });
 document.getElementById('btn-save').addEventListener('click', () => saveState(false));
 document.getElementById('btn-reset').addEventListener('click', resetGame);
+
+// Auto-dig toggle — flips state.autoDigOnTap. When off, the EXCAVATE button
+// only mines. The label updates and a toast confirms the change.
+function syncAutoDigUI() {
+  const stateEl = document.getElementById('autodig-state');
+  if (stateEl) {
+    const on = state.autoDigOnTap !== false;
+    stateEl.textContent = on ? 'ON' : 'OFF';
+    stateEl.style.color = on ? 'var(--amber-bright)' : 'var(--text-faint)';
+  }
+}
+document.getElementById('btn-autodig-toggle').addEventListener('click', () => {
+  state.autoDigOnTap = !(state.autoDigOnTap !== false);
+  toast(`◉ AUTO-DIG ${state.autoDigOnTap ? 'ON' : 'OFF'}`);
+  Sfx.play('tap');
+  syncAutoDigUI();
+});
 
 // Force Reload — clears all caches, unregisters service worker, hard reloads.
 // Use this when stuck on an old build. Saves state first so progress isn't lost.
@@ -4428,16 +4904,17 @@ function attachHoldButton(btn, action, opts = {}) {
 // attempts a dig if enough ore is in the bank. Hold to auto-repeat at
 // accelerating intervals.
 attachHoldButton(document.getElementById('excavate-btn'), () => {
-  // Mine first (this is the primary action — always succeeds if there's any
-  // ore in this layer, which there always is)
   mineOnce(false);
-  // Opportunistic dig (silent if can't afford — no error spam)
-  digDeeper(10, true);
+  // Auto-dig is opt-out via menu setting. When off, EXCAVATE only mines —
+  // useful for stockpiling ore without spending it on dig progress.
+  if (state.autoDigOnTap !== false) {
+    digDeeper(10, true);
+  }
   renderHeader();
   renderOreStrip();
   renderShaft();
   renderInventory();
-  return true; // never stop auto-repeat from this button
+  return true;
 }, { initialDelay: 350, startInterval: 200, minInterval: 70, accel: 0.88 });
 
 document.addEventListener('keydown', (e) => {
@@ -4497,6 +4974,11 @@ function tick() {
   }
   // Process auto-sell — drain ore overflow into credits
   const soldChanged = processAutoSell();
+
+  // Update missions: refresh if 24h elapsed, then update progress
+  const refreshed = refreshMissionsIfDue();
+  updateMissionProgress();
+  if (refreshed) renderMissionBadge();
 
   saveCounter += dt;
   if (saveCounter > 5) {
@@ -4779,9 +5261,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B36] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B37] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B36] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B37] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
