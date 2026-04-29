@@ -1080,6 +1080,62 @@
     border-color: var(--amber);
     box-shadow: 0 0 6px rgba(255,179,71,0.3);
   }
+
+  /* Focus row in Stash — single focus toggle per ore */
+  .focus-row {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--line);
+  }
+  .focus-row .auto-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+  /* Highlighted ring around the currently-focused ore row */
+  .ore-row.focused {
+    box-shadow: inset 0 0 0 1px var(--amber-bright), 0 0 12px rgba(255,179,71,0.25);
+    background: rgba(255,179,71,0.04);
+  }
+  .focus-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--amber-bright);
+    letter-spacing: 1px;
+    margin-left: 6px;
+    padding: 1px 5px;
+    border: 1px solid var(--amber);
+    border-radius: 1px;
+    background: rgba(255,179,71,0.08);
+    text-transform: uppercase;
+    vertical-align: 2px;
+  }
+
+  /* Focus indicator above the EXCAVATE button — shows what you've focused */
+  .focus-indicator {
+    background: rgba(255,179,71,0.08);
+    border: 1px solid var(--amber);
+    color: var(--amber-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 5px 10px;
+    text-align: center;
+    text-transform: uppercase;
+    box-shadow: 0 0 8px rgba(255,179,71,0.2);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .focus-indicator:active {
+    background: rgba(255,179,71,0.18);
+  }
+  .focus-indicator .focus-clear {
+    color: var(--text-faint);
+    font-weight: 400;
+    margin-left: 8px;
+    font-size: 9px;
+  }
   .ore-sell-price {
     font-size: 10px;
     color: var(--text-faint);
@@ -1718,7 +1774,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 33</span>
+      <span class="build-stamp" id="build-stamp">BUILD 34</span>
     </div>
     <div class="header-stats">
       <div>
@@ -1813,6 +1869,7 @@
         <span id="dig-progress-text">0 / 100</span>
       </div>
       <div class="dig-bar"><div class="dig-fill" id="dig-fill" style="width:0%"></div></div>
+      <div class="focus-indicator" id="focus-indicator" style="display:none;"></div>
       <button class="excavate-button" id="excavate-btn">
         <span class="excavate-label">⛏ EXCAVATE</span>
         <span class="excavate-cost" id="excavate-cost">—</span>
@@ -2330,6 +2387,8 @@ const DEFAULT_STATE = {
   // Auto-sell config: per-ore reserve threshold. Stored as { oreId: { on: bool, reserve: number } }.
   // When on, anything above the reserve count is auto-sold every tick.
   autoSell: {},
+  // Focused ore (60% drop chance when set) — null = normal weighted distribution
+  focusOre: null,
   lastSaved: Date.now(),
 };
 
@@ -3038,6 +3097,17 @@ function pickOreToMine() {
       return { id, o, w };
     });
   if (candidates.length === 0) return null;
+
+  // Focus mode: 60% chance to roll the focused ore directly, 40% normal weighted.
+  // Focus is silently ignored if the focused ore is not currently mineable
+  // (e.g., player switched worlds or hasn't reached its minDepth).
+  if (state.focusOre) {
+    const focused = candidates.find(c => c.id === state.focusOre);
+    if (focused && Math.random() < 0.6) {
+      return focused;
+    }
+  }
+
   const total = candidates.reduce((s, c) => s + c.w, 0);
   let r = Math.random() * total;
   for (const c of candidates) {
@@ -3224,6 +3294,21 @@ function renderShaft() {
     costEl.innerHTML = oreDef
       ? `DIG: <span class="sym">${oreDef.sym}</span> ${fmt(have)}/${oreCost} ${oreDef.name.toUpperCase()}`
       : `DIG: ${oreCost}`;
+  }
+
+  // Focus indicator chip — visible only when an ore is currently focused
+  const focusEl = document.getElementById('focus-indicator');
+  if (focusEl) {
+    if (state.focusOre && ORES[state.focusOre]) {
+      const fo = ORES[state.focusOre];
+      focusEl.style.display = 'block';
+      focusEl.style.borderColor = fo.color;
+      focusEl.style.color = fo.color;
+      focusEl.style.boxShadow = `0 0 8px ${fo.color}40`;
+      focusEl.innerHTML = `◎ FOCUSING ${fo.name.toUpperCase()} <span class="focus-clear">TAP TO CLEAR</span>`;
+    } else {
+      focusEl.style.display = 'none';
+    }
   }
 
   updateDepthWorld();
@@ -3472,14 +3557,16 @@ function renderInventory() {
     const price = sellPrice(id);
     const canSell = !locked && count > 0;
     const initialAmt = canSell ? Math.min(count, sellAmounts[id] || 0) : 0;
-    // Auto-sell config: ON state and reserve threshold
     const auto = (state.autoSell && state.autoSell[id]) || { on: false, reserve: 0 };
     const autoOn = !!auto.on;
     const reserve = auto.reserve || 0;
-    return `<div class="ore-row ${locked ? 'locked' : ''}">
+    // Focus only applies to raw ore (not ingots/alloys/composites)
+    const isRawOre = !!ORES[id];
+    const focused = isRawOre && state.focusOre === id;
+    return `<div class="ore-row ${locked ? 'locked' : ''} ${focused ? 'focused' : ''}">
       <div class="ore-icon" style="--ore-color:${def.color}">${def.sym}</div>
       <div class="ore-info">
-        <div class="ore-name">${locked ? '???' : def.name}</div>
+        <div class="ore-name">${locked ? '???' : def.name}${focused ? ' <span class="focus-badge">◎ FOCUSED</span>' : ''}</div>
         <div class="ore-depth">${locked ? `Unlocks at ${depthGate}m` : `◈${fmt(price)} ea`}</div>
       </div>
       <div>
@@ -3514,6 +3601,12 @@ function renderInventory() {
               ${autoOn ? '' : 'disabled'}>
           </div>
         </div>
+        ${isRawOre ? `<div class="focus-row">
+          <button class="auto-toggle ${focused ? 'on' : ''}" data-focus="${id}">
+            <span class="auto-dot"></span>
+            <span class="auto-label">${focused ? '◎ FOCUS ACTIVE' : '◎ FOCUS WHEN MINING'}</span>
+          </button>
+        </div>` : ''}
       </div>`}
     </div>`;
   };
@@ -3664,6 +3757,26 @@ function renderInventory() {
       if (!state.autoSell) state.autoSell = {};
       if (!state.autoSell[id]) state.autoSell[id] = { on: false, reserve: 0 };
       state.autoSell[id].reserve = val;
+    });
+  });
+
+  // Wire focus toggles — only one ore can be focused at a time.
+  // Tap focused ore again to unfocus, tap a different ore to switch focus.
+  list.querySelectorAll('[data-focus]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.focus;
+      if (state.focusOre === id) {
+        state.focusOre = null;
+        toast('◎ FOCUS CLEARED');
+      } else {
+        state.focusOre = id;
+        const def = ORES[id];
+        toast(`◎ FOCUSED ON ${def?.name?.toUpperCase() || id}`);
+      }
+      Sfx.play('tap');
+      renderInventory();
+      renderShaft(); // updates the focus pill near EXCAVATE
     });
   });
 }
@@ -4152,6 +4265,17 @@ document.getElementById('btn-mute-toggle').addEventListener('click', () => {
   if (!newMuted) Sfx.play('confirm'); // play a tone after unmuting so user hears it work
 });
 
+// Focus indicator — tap to clear the current focus
+document.getElementById('focus-indicator').addEventListener('click', () => {
+  if (state.focusOre) {
+    state.focusOre = null;
+    toast('◎ FOCUS CLEARED');
+    Sfx.play('tap');
+    renderShaft();
+    renderInventory();
+  }
+});
+
 // Volume slider
 document.getElementById('volume-slider').addEventListener('input', (e) => {
   const pct = parseInt(e.target.value) || 0;
@@ -4611,9 +4735,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B33] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B34] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B33] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B34] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
