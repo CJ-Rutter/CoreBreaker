@@ -94,27 +94,39 @@
   header {
     background: linear-gradient(180deg, #2a1f17, #1a1410);
     border-bottom: 2px solid var(--line-hi);
-    padding: 8px 12px;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 10px;
+    padding: 8px 12px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     flex-shrink: 0;
     box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     z-index: 10;
   }
+  /* Top row: empty spacer (left) keeps title perfectly centered, menu button right */
+  .header-top {
+    display: grid;
+    grid-template-columns: 36px 1fr 36px;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-spacer {
+    width: 36px;
+    height: 36px;
+  }
 
   .logo {
     font-family: 'Russo One', 'Impact', 'Arial Black', sans-serif;
-    font-size: 18px;
+    font-size: 20px;
     color: var(--amber-bright);
-    letter-spacing: 1.5px;
+    letter-spacing: 2px;
     text-shadow: 0 0 10px rgba(255,179,71,0.55), 0 1px 0 rgba(0,0,0,0.5);
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     text-transform: uppercase;
     line-height: 1;
+    text-align: center;
   }
   .logo-dot {
     width: 8px; height: 8px;
@@ -128,7 +140,8 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
-  /* Build stamp — small chip beside the logo, looks like an industrial spec plate */
+
+  /* Build stamp — kept as a class so the menu version chip can reuse the look */
   .build-stamp {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
@@ -142,9 +155,7 @@
     border-radius: 1px;
     text-transform: uppercase;
     box-shadow: inset 0 0 4px rgba(255,179,71,0.15);
-    align-self: center;
     white-space: nowrap;
-    flex-shrink: 0;
   }
   .build-stamp.update-available {
     color: var(--amber-bright);
@@ -157,10 +168,17 @@
     50%      { box-shadow: inset 0 0 4px rgba(255,179,71,0.15), 0 0 8px 0 rgba(255,210,122,0.7); }
   }
 
+  /* Second header row: compact stat blocks side by side */
   .header-stats {
     display: flex;
-    gap: 10px;
-    justify-content: flex-end;
+    gap: 24px;
+    justify-content: center;
+    align-items: baseline;
+  }
+  .hstat-block {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
   .hstat {
     font-family: 'JetBrains Mono', monospace;
@@ -171,12 +189,10 @@
   }
   .hstat-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-size: 9px;
     color: var(--text-faint);
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    margin-bottom: 2px;
-    text-align: right;
   }
 
   .menu-btn {
@@ -188,10 +204,11 @@
     font-size: 16px;
     cursor: pointer;
     font-family: inherit;
+    grid-column: 3;
   }
   .menu-btn:active { background: var(--bg-panel-hi); }
 
-  /* Mission badge — sits between hstats and menu button */
+  /* Mission badge — sits in the shaft header (top-right of mine view) */
   .missions-btn {
     position: relative;
     background: var(--bg-deep);
@@ -201,7 +218,7 @@
     height: 36px;
     cursor: pointer;
     font-family: inherit;
-    margin-right: 4px;
+    flex-shrink: 0;
   }
   .missions-btn:active { background: var(--bg-panel-hi); }
   .missions-btn .missions-icon { font-size: 18px; line-height: 1; }
@@ -1908,26 +1925,24 @@
 <body>
 <div id="app">
   <header>
-    <div class="logo">
-      <span class="logo-dot"></span>
-      CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 39</span>
+    <div class="header-top">
+      <div class="header-spacer"></div>
+      <div class="logo">
+        <span class="logo-dot"></span>
+        CORE·BREAKER
+      </div>
+      <button class="menu-btn" id="menu-btn" aria-label="Menu">☰</button>
     </div>
     <div class="header-stats">
-      <div>
+      <div class="hstat-block">
         <div class="hstat-label">Credits</div>
         <div class="hstat" id="credits">0</div>
       </div>
-      <div>
+      <div class="hstat-block">
         <div class="hstat-label">Power</div>
         <div class="hstat" id="power">1.0×</div>
       </div>
     </div>
-    <button class="missions-btn" id="missions-btn" aria-label="Missions">
-      <span class="missions-icon">▣</span>
-      <span class="missions-count" id="missions-count">0</span>
-    </button>
-    <button class="menu-btn" id="menu-btn" aria-label="Menu">☰</button>
   </header>
   <div class="world-strip" id="world-badge">SECTOR 01 // <span>SURFACE EARTH</span></div>
 
@@ -1941,6 +1956,10 @@
         <div class="layer-name" id="layer-name">TOPSOIL</div>
         <div class="layer-sub" id="layer-sub">Loose dirt and pebbles</div>
       </div>
+      <button class="missions-btn" id="missions-btn" aria-label="Missions">
+        <span class="missions-icon">▣</span>
+        <span class="missions-count" id="missions-count">0</span>
+      </button>
     </div>
     <div class="shaft-canvas" id="shaft-canvas">
       <div class="shaft-bg" id="shaft-bg"></div>
@@ -2058,7 +2077,21 @@
   </div>
 
   <nav class="tab-bar">
-    <button class="active" data-view="mine"><span class="tab-icon">⛏</span>Mine</button>
+    <button class="active" data-view="mine">
+      <span class="tab-icon">
+        <svg viewBox="0 0 32 22" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="width:18px;height:13px;vertical-align:middle;">
+          <rect x="1" y="17" width="22" height="4" rx="0.5" fill="currentColor"/>
+          <circle cx="4" cy="19" r="1" fill="#1a1410"/>
+          <circle cx="11" cy="19" r="1" fill="#1a1410"/>
+          <circle cx="18" cy="19" r="1" fill="#1a1410"/>
+          <rect x="4" y="9" width="11" height="8" fill="currentColor"/>
+          <rect x="6" y="11" width="4" height="3" fill="#1a1410"/>
+          <path d="M 13 11 L 24 4 L 26 5.5 L 15 12.5 Z" fill="currentColor"/>
+          <path d="M 24 4 L 28 11 L 26 12 L 22 5 Z" fill="currentColor"/>
+          <path d="M 26 11 L 31 12 L 30.5 15 L 25.5 14 Z" fill="currentColor"/>
+        </svg>
+      </span>Mine
+    </button>
     <button data-view="inv"><span class="tab-icon">◆</span>Stash</button>
     <button data-view="forge"><span class="tab-icon">🜂</span>Forge</button>
     <button data-view="gear"><span class="tab-icon">⚙</span>Gear</button>
@@ -2136,6 +2169,10 @@
       </div>
       <div>
         <div class="modal-section-title">App</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;">
+          <span>Version</span>
+          <span class="build-stamp" id="build-stamp">v0.0.40</span>
+        </div>
         <button class="action-btn" id="btn-force-reload">
           FORCE RELOAD <span class="action-btn-arrow">↻</span>
         </button>
@@ -5299,9 +5336,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B39] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B40] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B39] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B40] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
