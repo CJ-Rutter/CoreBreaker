@@ -1911,7 +1911,7 @@
     <div class="logo">
       <span class="logo-dot"></span>
       CORE·BREAKER
-      <span class="build-stamp" id="build-stamp">BUILD 38</span>
+      <span class="build-stamp" id="build-stamp">BUILD 39</span>
     </div>
     <div class="header-stats">
       <div>
@@ -3190,14 +3190,15 @@ function currentLayer() {
 
 function digCost() {
   const base = 50;
-  // Three-stage curve, calibrated so total Earth (0-1000m) is ~80-100h
-  // of mostly-AFK play with mid-game upgrades:
-  //   0-200m:   1.05^(d/5) — initial difficulty ramp (unchanged)
-  //   200-500m: 1.02^(d/5) compound — meaningful late-mid challenge (was 1.045)
-  //   500m+:    1.005^(d/5) compound — slow drift toward Void layer (was linear)
-  // The three multipliers chain: at 500m we have ~21K cost vs the old ~92K,
-  // and the post-500m growth is gentle enough that 1000m is reachable in
-  // an overnight session, not weeks.
+  // Three-stage curve. Past 500m, each world has its own exponential base
+  // calibrated to total game length:
+  //   Earth (0):    1.005^(d/5) — gentle, tutorial world. ~3-5 days total.
+  //   Lunar (1):    1.020^(d/5) — meaningful endgame ramp. ~3-4 days.
+  //   Volcanic (2): 1.030^(d/5) — steep wall demanding upgrades. ~5-7 days.
+  //   Void (3):     1.040^(d/5) — hardest curve. ~7-10 days. True endgame.
+  // Combined target: ~3 weeks passive completion across all four worlds.
+  const WORLD_LATE_BASES = [1.005, 1.020, 1.030, 1.040];
+  const lateBase = WORLD_LATE_BASES[state.currentWorld] || 1.005;
   let scale;
   if (state.depth <= 200) {
     scale = Math.pow(1.05, state.depth / 5);
@@ -3205,12 +3206,15 @@ function digCost() {
     scale = Math.pow(1.05, state.depth / 5) * Math.pow(1.02, (state.depth - 200) / 5);
   } else {
     const scaleAt500 = Math.pow(1.05, 100) * Math.pow(1.02, 60);
-    scale = scaleAt500 * Math.pow(1.005, (state.depth - 500) / 5);
+    scale = scaleAt500 * Math.pow(lateBase, (state.depth - 500) / 5);
   }
+  // World multipliers: the cost-of-doing-business in each world. Combined
+  // with the steeper late-game curves above, these create a natural
+  // power-fantasy → challenge gradient as players unlock new worlds.
   let mult = (buffs.digMult || 1);
-  if (state.currentWorld === 1) mult *= (buffs.lunarDigMult || 1) * 1.4;
-  if (state.currentWorld === 2) mult *= 4.5;
-  if (state.currentWorld === 3) mult *= 12;
+  if (state.currentWorld === 1) mult *= (buffs.lunarDigMult || 1) * 1.5;
+  if (state.currentWorld === 2) mult *= 4.0;
+  if (state.currentWorld === 3) mult *= 20.0;
   return Math.ceil(base * scale * mult);
 }
 
@@ -5295,9 +5299,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B38] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B39] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B38] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B39] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
