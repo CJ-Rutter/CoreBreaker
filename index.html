@@ -94,10 +94,10 @@
   header {
     background: linear-gradient(180deg, #2a1f17, #1a1410);
     border-bottom: 2px solid var(--line-hi);
-    padding: 8px 12px 6px;
+    padding: 5px 12px 4px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     flex-shrink: 0;
     box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     z-index: 10;
@@ -105,25 +105,25 @@
   /* Top row: empty spacer (left) keeps title perfectly centered, menu button right */
   .header-top {
     display: grid;
-    grid-template-columns: 36px 1fr 36px;
+    grid-template-columns: 32px 1fr 32px;
     align-items: center;
     gap: 8px;
   }
   .header-spacer {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
   }
 
   .logo {
     font-family: 'Russo One', 'Impact', 'Arial Black', sans-serif;
-    font-size: 20px;
+    font-size: 18px;
     color: var(--amber-bright);
     letter-spacing: 2px;
     text-shadow: 0 0 10px rgba(255,179,71,0.55), 0 1px 0 rgba(0,0,0,0.5);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 7px;
     text-transform: uppercase;
     line-height: 1;
     text-align: center;
@@ -199,9 +199,9 @@
     background: var(--bg-deep);
     border: 1px solid var(--line-hi);
     color: var(--amber-bright);
-    width: 36px;
-    height: 36px;
-    font-size: 16px;
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
     cursor: pointer;
     font-family: inherit;
     grid-column: 3;
@@ -2171,7 +2171,7 @@
         <div class="modal-section-title">App</div>
         <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 2px 8px;font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;">
           <span>Version</span>
-          <span class="build-stamp" id="build-stamp">v0.0.40</span>
+          <span class="build-stamp" id="build-stamp">v0.0.41</span>
         </div>
         <button class="action-btn" id="btn-force-reload">
           FORCE RELOAD <span class="action-btn-arrow">↻</span>
@@ -5336,9 +5336,9 @@ if (document.fonts && document.fonts.check) {
   document.fonts.ready.then(() => {
     const loaded = document.fonts.check('16px "Black Ops One"');
     if (loaded) {
-      console.log('[CORE-BREAKER B40] Black Ops One font loaded OK');
+      console.log('[CORE-BREAKER B41] Black Ops One font loaded OK');
     } else {
-      console.warn('[CORE-BREAKER B40] Black Ops One font FAILED to load — using fallback');
+      console.warn('[CORE-BREAKER B41] Black Ops One font FAILED to load — using fallback');
       setTimeout(() => toast('⚠ CUSTOM FONT BLOCKED — USING FALLBACK'), 6500);
     }
   });
